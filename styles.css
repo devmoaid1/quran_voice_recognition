@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.btn {
+  @apply
+  font-semibold
+  rounded-full
+  text-white
+  bg-primary
+  hover:bg-primary-hover
+  transition
+  py-2
+  px-3
+  shadow-sm
+}
