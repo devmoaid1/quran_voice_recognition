@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-
+from pydub import AudioSegment
 import os
 import tempfile
 from transformers import WhisperProcessor, WhisperForConditionalGeneration
@@ -37,24 +37,17 @@ def transcribe_audio():
     audio_file = request.files['audio']
     # Process the audio file (e.g., transcribe it)
     print(audio_file)
-    # After processing, return a success response
-    return jsonify({'message': 'Audio sent successfully'}), 200
-
-    audio_file = request.files['audio']
     
-    # Save the uploaded audio file using soundfile
-    temp_file_path = 'temp_audio.wav'
+    # Load the audio file using pydub
+    audio = AudioSegment.from_file(audio_file)
     
-    # Read the audio file stream and save it in WAV format
-    audio_data = audio_file.read()
-    
-    # Use soundfile to write the audio data directly
-    with open(temp_file_path, 'wb') as f:
-        f.write(audio_data)
-
-
+     # Save the audio file in a specified format (e.g., WAV)
+    save_path =  'saved_audio.wav'
+    audio.export(save_path, format='wav')
     # Load audio with librosa
-    speech_array, original_sampling_rate = librosa.load(temp_file_path, sr=None)
+    speech_array, original_sampling_rate = librosa.load(save_path, sr=None)
+        
+    print(speech_array)
 
     # Normalize audio levels
     speech_array = speech_array / np.max(np.abs(speech_array))
@@ -85,8 +78,11 @@ def transcribe_audio():
     print("connected")
     # Send the transcription back to the client
     return jsonify({'text': transcription})
+    
 
 
 
 if __name__ == '__main__':
+    # # Create the 'saved_audios' directory if it doesn't exist
+    # os.makedirs('saved_audios', exist_ok=True)
     app.run(debug=True)
