@@ -5,11 +5,14 @@ const recordButton = document.getElementById("record-button");
 const audioPlayback = document.getElementById("audioPlayback");
 const recordingPath = document.getElementById("recording-path");
 
-recordButton.addEventListener("click", async (event) => {
+recordButton.addEventListener("click", async (event) => { 
+
+    
     
     event.preventDefault()
     // Check for microphone access
-
+    
+    socket=io('http://127.0.0.1:5000')
 
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
