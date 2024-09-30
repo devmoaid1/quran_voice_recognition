@@ -44,7 +44,7 @@
 
       <section class="flex flex-col items-center gap-20 py-20 mb-24">
         <h2 class="text-2xl font-bold">Try it out!</h2>
-        <form class="relative">
+        <form class="relative" id="audio-form">
           <input
             class="p-3 pr-16 border rounded-full box-border border-black text-right text-2xl w-[38rem]"
             type="text"
@@ -52,7 +52,7 @@
           />
           <button
             id="record-button"
-            type="button"
+            type="submit"
             class="btn absolute right-0 h-full aspect-square scale-[102%]"
           >
             <svg
@@ -69,12 +69,7 @@
             </svg>
           </button>
         </form>
-        <audio
-          id="audioPlayback"
-          controls
-          class="mt-4"
-          style="display: none"
-        ></audio>
+        <p id="transcription">Transcription will appear here...</p>
       </section>
     </main>
 
