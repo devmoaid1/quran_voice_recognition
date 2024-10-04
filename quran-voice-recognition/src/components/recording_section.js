@@ -75,7 +75,7 @@ const AudioRecorder = () => {
         <input
           className="p-3 pr-16 border rounded-full box-border border-black text-right text-2xl w-[38rem]"
           type="text"
-          value="قل هو الله أحد"
+          value={transcription}
           readOnly // Assuming you want to keep it read-only
         />
         <button
@@ -111,7 +111,7 @@ const AudioRecorder = () => {
           )}
         </button>
       </div>
-      <p id="transcription">{transcription}</p>
+    
     </section>
   );
 };
