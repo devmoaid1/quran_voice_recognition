@@ -1,3 +1,7 @@
+import frame from '../assets/img/frame.svg'
+import hero from '../assets/img/hero.svg'
+
+
 function InfoSection() {
     return (
         <section class="grid grid-cols-2 h-min">
@@ -15,10 +19,10 @@ function InfoSection() {
         </div>
         <div class="relative">
           <div class="absolute w-full h-full flex items-center justify-center">
-            <img src="assets/img/hero.svg" class="drop-shadow-md" />
+            <img src={hero} class="drop-shadow-md" />
           </div>
           <div class="flex items-center justify-center w-full h-full">
-            <img src="assets/img/frame.svg" />
+            <img src={frame} />
           </div>
         </div>
       </section>

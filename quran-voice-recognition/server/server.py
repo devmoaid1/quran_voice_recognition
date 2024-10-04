@@ -9,8 +9,8 @@ import wave
 import soundfile as sf  # Use soundfile to save audio 
 from flask_cors import CORS
 import torch
-app = Flask(_name_) 
-CORS(app, resources={r"/transcribe": {"origins": "http://127.0.0.1:5500/"}})
+app = Flask(__name__) 
+CORS(app)
 
 
 processor = WhisperProcessor.from_pretrained("distil_whisper_large_ama")
@@ -100,7 +100,7 @@ def transcribe_audio():
 
 
 
-if _name_ == '_main_':
+if __name__ == '__main__':
     # # Create the 'saved_audios' directory if it doesn't exist
     # os.makedirs('saved_audios', exist_ok=True)
     app.run(debug=True, use_reloader=False)  # Disable the use of reloader
