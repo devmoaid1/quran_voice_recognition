@@ -14,7 +14,7 @@ CORS(app)
 
 
 processor = WhisperProcessor.from_pretrained("distil_whisper_large_ama")
-model = WhisperForConditionalGeneration.from_pretrained("distil_whisper_large_ama/checkpoint-500")
+model = WhisperForConditionalGeneration.from_pretrained("distil_whisper_large_ama/checkpoint-1000")
 model.to("cuda")
 forced_decoder_ids = processor.get_decoder_prompt_ids(language="arabic", task="transcribe")
 
