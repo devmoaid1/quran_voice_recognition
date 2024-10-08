@@ -9,6 +9,7 @@ import wave
 import soundfile as sf  # Use soundfile to save audio 
 from flask_cors import CORS
 import torch
+import difflib  # Import difflib to compare strings
 app = Flask(__name__) 
 CORS(app)
 
@@ -29,6 +30,29 @@ def save_wav_file(audio_data, filename, channels=1, rate=16000):
         wav_file.setsampwidth(2)  # 16-bit samples
         wav_file.setframerate(rate)
         wav_file.writeframes(audio_data) 
+        
+def load_verses(file_path):
+    """Load verses from a text file into a list."""
+    with open(file_path, 'r', encoding='utf-8') as file:
+        verses = [line.strip() for line in file.readlines()]
+    return verses
+
+def find_best_match(transcription, verses, max_diff=3):
+    """Find the verse with the closest match to the transcription."""
+    best_match = None
+    best_score = float('inf')  # Initialize with a high score
+
+    for verse in verses:
+        diff = difflib.SequenceMatcher(None, transcription, verse)
+        similarity = diff.ratio()
+        distance = len(verse) * (1 - similarity)  # Approximate the number of different characters
+
+        if distance < best_score and distance <= max_diff:
+            best_score = distance
+            best_match = verse
+
+    return best_match if best_match else transcription  # Return the best match or the original transcription
+        
         
 @app.route('/transcribe', methods=['POST'])
 def transcribe_audio():
@@ -89,13 +113,20 @@ def transcribe_audio():
         predicted_ids = model.generate(input_features=input_features)
 
     torch.cuda.empty_cache()
-
-    # Decode token ids to text
+    
     transcription = processor.tokenizer.decode(predicted_ids[0], skip_special_tokens=True)
-    print(f"transcription is :{transcription}")
-    print("connected")
-    # Send the transcription back to the client
-    return jsonify({'text': transcription})
+    
+  # Load the verses from the text file (Assuming each verse is in a row)
+    verse_file_path = 'verses.txt'  # Replace this with the actual path to your verse file
+    verses = load_verses(verse_file_path)
+
+    # Compare transcription with the closest verse from the file
+    final_transcription = find_best_match(transcription, verses, max_diff=5)
+    
+    print(f"Final transcription: {final_transcription}")
+
+    # Send the final transcription back to the client
+    return jsonify({'text': final_transcription})
     
 
 
