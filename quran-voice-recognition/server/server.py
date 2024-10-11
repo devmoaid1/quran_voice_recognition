@@ -11,7 +11,7 @@ from flask_cors import CORS
 import torch
 import difflib  # Import difflib to compare strings
 app = Flask(__name__) 
-CORS(app)
+CORS(app,resources={r"/transcribe": {"origins": "*"}})
 
 
 processor = WhisperProcessor.from_pretrained("distil_whisper_large_ama")
@@ -134,4 +134,4 @@ def transcribe_audio():
 if __name__ == '__main__':
     # # Create the 'saved_audios' directory if it doesn't exist
     # os.makedirs('saved_audios', exist_ok=True)
-    app.run(debug=True, use_reloader=False)  # Disable the use of reloader
+    app.run(host='0.0.0.0',port=5000,debug=True, use_reloader=False)  # Disable the use of reloader
