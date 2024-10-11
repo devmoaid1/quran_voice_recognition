@@ -9,10 +9,12 @@ import wave
 import soundfile as sf  # Use soundfile to save audio 
 from flask_cors import CORS
 import torch
-import difflib  # Import difflib to compare strings
+import difflib
+from flask_socketio import SocketIO, send
 app = Flask(__name__) 
 CORS(app)
 
+socketio = SocketIO(app, cors_allowed_origins="*",async_mode="eventlet")  # Initialize SocketIO
 
 processor = WhisperProcessor.from_pretrained("distil_whisper_large_ama")
 model = WhisperForConditionalGeneration.from_pretrained("distil_whisper_large_ama/checkpoint-1000")
@@ -22,6 +24,19 @@ forced_decoder_ids = processor.get_decoder_prompt_ids(language="arabic", task="t
 @app.route('/')
 def index():
     return "Whisper Real-time Transcription Server" 
+
+@socketio.on('connect')
+def handle_connect():
+    print("qirat client connected")
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    print("qirat client disconnected")
+
+@socketio.on('message')
+def handle_message(message):
+    print('Received message: ' + message)
+    send('Message received: ' + message, broadcast=True)
 
 def save_wav_file(audio_data, filename, channels=1, rate=16000):
     """Save raw audio data as a WAV file."""
@@ -134,4 +149,4 @@ def transcribe_audio():
 if __name__ == '__main__':
     # # Create the 'saved_audios' directory if it doesn't exist
     # os.makedirs('saved_audios', exist_ok=True)
-    app.run(debug=True, use_reloader=False)  # Disable the use of reloader
+    socketio.run(app,debug=True, use_reloader=False)  # Disable the use of reloader

@@ -1,34 +1,54 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef ,useEffect} from 'react';
+import io from 'socket.io-client';
 
+
+
+const SOCKET_SERVER_URL = 'http://127.0.0.1:5000';
 const AudioRecorder = () => {
   const [isRecording, setIsRecording] = useState(false);
+  const [socket, setSocket] = useState(null);
   const [transcription, setTranscription] = useState('Transcription will appear here...');
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
+
+  useEffect(() => {
+    // Clean up when the component unmounts
+    return () => {
+      if (socket) {
+        socket.disconnect();
+      }
+    };
+  }, [socket]);
   // Function to start recording
   const startRecording = async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    mediaRecorderRef.current = new MediaRecorder(stream);
-    
-    mediaRecorderRef.current.start();
-    setIsRecording(true);
-    
-    mediaRecorderRef.current.ondataavailable = (event) => {
-      audioChunksRef.current.push(event.data);
-    };
+    const newSocket = io(SOCKET_SERVER_URL);
+      setSocket(newSocket);
+      setIsRecording(true);
 
+      newSocket.on('connect', () => {
+        console.log('Connected to server!');
+      });
+
+      newSocket.on('message', (data) => {
+        console.log('Message from server:', data);
+        setTranscription(data);
+      });
+
+      newSocket.on('disconnect', () => {
+        console.log('Disconnected from server!');})
+      
+      newSocket.emit('message', 'Recording started...')
     // Move the `sendAudioToServer` call to the stop function
-    mediaRecorderRef.current.onstop = async () => {
-      // Send the audio to the server when recording stops
-      await sendAudioToServer();
-    };
+   
   };
 
   // Function to stop recording
   const stopRecording = () => {
-    mediaRecorderRef.current.stop();
     setIsRecording(false);
+    socket.disconnect();
+    setSocket(null);  
+    console.log('Disconnected from server!');
   };
 
   // Function to send audio to the server
