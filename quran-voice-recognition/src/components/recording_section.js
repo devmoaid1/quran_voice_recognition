@@ -44,7 +44,7 @@ const AudioRecorder = () => {
 
     try {
       // Make the POST request to the server
-      const response = await fetch('http://127.0.0.1:5000/transcribe', {
+      const response = await fetch('http://38.80.123.219:5000/transcribe', {
         method: 'POST',
         body: formData,
       });
