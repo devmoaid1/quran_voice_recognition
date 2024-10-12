@@ -1,13 +1,16 @@
 import React, { useState, useRef } from 'react';
+import DotLoader from '../../../../components/dot_loader';
 
 const RecordingSection = () => {
   const [isRecording, setIsRecording] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [transcription, setTranscription] = useState('Transcription will appear here...');
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
   // Function to start recording
   const startRecording = async () => {
+    setIsLoading(true)
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     mediaRecorderRef.current = new MediaRecorder(stream);
     
@@ -29,60 +32,77 @@ const RecordingSection = () => {
   const stopRecording = () => {
     mediaRecorderRef.current.stop();
     setIsRecording(false);
+    
   };
 
   // Function to send audio to the server
-  const sendAudioToServer = async () => {
-    console.log("Sending audio to server...");
+ // Function to send audio to the server
+const sendAudioToServer = async () => {
+  console.log("Sending audio to server...");
 
-    // Create a Blob from the audio chunks
-    const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-    audioChunksRef.current = []; // Clear the chunks after sending
+  // Create a Blob from the audio chunks
+  const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+  audioChunksRef.current = []; // Clear the chunks after sending
 
-    const formData = new FormData();
-    formData.append('audio', audioBlob, 'audio.wav');
+  const formData = new FormData();
+  formData.append('audio', audioBlob, 'audio.wav');
 
-    try {
-      // Make the POST request to the server
-      const response = await fetch('http://38.80.123.219:5000/transcribe', {
-        method: 'POST',
-        body: formData,
-      });
+  try {
+    // Make the POST request to the server
+    const response = await fetch('http://38.80.123.219:5000/transcribe', {
+      method: 'POST',
+      body: formData,
+    });
 
-      // Check if the response is okay (status code 200-299)
-      if (!response.ok) {
-        const errorText = await response.text(); // Get the error text from the response
-        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
-      }
-
-      // Parse the response as JSON
-      const data = await response.json();
-      console.log(data);
-
-      // Update the transcription state
-      setTranscription(data['text']);
-
-    } catch (error) {
-      console.error('Error sending audio to server:', error);
-      alert('Failed to send audio to server. Please try again.');
+    // Check if the response is okay (status code 200-299)
+    if (!response.ok) {
+      const errorText = await response.text(); // Get the error text from the response
+      throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
     }
-  };
+
+    // Parse the response as JSON
+    const data = await response.json();
+    console.log(data);
+    
+    // Update the transcription state with the received text
+    setTranscription(data['text']);
+
+  } catch (error) {
+    console.error('Error sending audio to server:', error);
+    alert('Failed to send audio to server. Please try again.');
+  } finally {
+    // Always set loading to false once the request completes, regardless of success or failure
+    setIsLoading(false);
+  }
+};
+
 
   return (
     <section className="flex flex-col items-center gap-20 py-20 mb-24">
-      <h2 className="text-2xl font-bold">Try it out!</h2>
-      <div className="relative" id="audio-form">
-        <input
-          className="p-3 pr-16 border rounded-full box-border border-black text-right text-2xl w-[38rem]"
-          type="text"
-          value={transcription}
-          readOnly // Assuming you want to keep it read-only
-        />
+    <h2 className="text-2xl font-bold">Try it out!</h2>
+    <div className="relative" id="audio-form">
+      <div className="relative p-2 pr-16 border rounded-full box-border border-black text-right text-2xl w-[38rem] h-[3rem] flex items-center justify-between">
+        {isLoading ? (
+          // Show the DotLoader when recording is active, centered inside the input container
+          <div className="flex items-center justify-center w-full">
+            <DotLoader />
+          </div>
+        ) : (
+          // Show the input field text when not recording
+          <input
+            className="w-full h-full border-none outline-none text-right bg-transparent py-40"
+            type="text"
+            value={transcription}
+            readOnly
+          />
+        )}
+  
+        {/* The record button positioned absolutely relative to the input or loader */}
         <button
           id="record-button"
           type="button"
           onClick={isRecording ? stopRecording : startRecording}
-          className="btn absolute right-0 h-full aspect-square scale-[102%]"
+          className="btn absolute right-0 top-0 h-full aspect-square scale-[102%] rounded-full" // Added rounded-full class
         >
           {isRecording ? (
             <svg
@@ -91,10 +111,7 @@ const RecordingSection = () => {
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 256 256"
             >
-              <path
-                fill="currentColor"
-                d="M64 64h128v128H64z"
-              />
+              <path fill="currentColor" d="M64 64h128v128H64z" />
             </svg>
           ) : (
             <svg
@@ -111,8 +128,10 @@ const RecordingSection = () => {
           )}
         </button>
       </div>
-    
-    </section>
+    </div>
+  </section>
+  
+
   );
 };
 
