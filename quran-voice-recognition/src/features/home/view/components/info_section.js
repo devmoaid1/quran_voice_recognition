@@ -7,13 +7,17 @@ function InfoSection() {
         <section class="grid grid-cols-2 h-min">
         <div class="flex flex-col justify-center gap-12 px-16 py-28">
           <h1 class="text-4xl font-bold">
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit
+            YOUR AI QURAN COMPANION
           </h1>
-          <p>
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
-            eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim
-            ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut
-            aliquip ex ea commodo consequat.
+          <p class="relative pl-6">
+            <span class="text-xl">
+              The Prophet (may Allah’s peace and blessings be upon him) said:
+            </span><br />
+            <span class="font-bold text-2xl mt-20">  
+              <span class="absolute left-0 top-5 transform translate-x-[0px] text-4xl">“</span>
+              It will be said to the one devoted to the Qur’an: Read, ascend, and recite with deliberation as you used to recite in the world. Your rank will be at the last verse you recite.
+              <span class="absolute right-90 bottom-0 transform translate-x-[0px] text-4xl">”</span>
+            </span>
           </p>
           <a href="" class="btn w-full flex justify-center">Try it out!</a>
         </div>

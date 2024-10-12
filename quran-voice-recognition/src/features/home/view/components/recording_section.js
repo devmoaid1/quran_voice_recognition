@@ -79,7 +79,7 @@ const sendAudioToServer = async () => {
 
   return (
     <section className="flex flex-col items-center gap-20 py-20 mb-24">
-    <h2 className="text-2xl font-bold">Try it out!</h2>
+    <h2 className="text-2xl font-bold">Start Reciting!</h2>
     <div className="relative" id="audio-form">
       <div className="relative p-2 pr-16 border rounded-full box-border border-black text-right text-2xl w-[38rem] h-[3rem] flex items-center justify-between">
         {isLoading ? (
