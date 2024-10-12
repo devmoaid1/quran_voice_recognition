@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 
-const AudioRecorder = () => {
+const RecordingSection = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [transcription, setTranscription] = useState('Transcription will appear here...');
   const mediaRecorderRef = useRef(null);
@@ -116,4 +116,4 @@ const AudioRecorder = () => {
   );
 };
 
-export default AudioRecorder;
+export default RecordingSection;
