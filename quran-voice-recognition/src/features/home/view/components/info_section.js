@@ -1,5 +1,5 @@
-import frame from '../assets/img/frame.svg'
-import hero from '../assets/img/hero.svg'
+import frame from '../../../../assets/img/frame.svg'
+import hero from '../../../../assets/img/hero.svg'
 
 
 function InfoSection() {
