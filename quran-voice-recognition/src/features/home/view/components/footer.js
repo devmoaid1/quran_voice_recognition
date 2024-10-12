@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/anchor-is-valid */
 function Footer() {
     return (
         <footer class="bg-[#51AC82] text-white px-8 py-3 flex flex-col">
@@ -8,10 +9,10 @@ function Footer() {
           </div>
           <nav>
             <ul class="flex gap-10">
-              <li><a href="">About Us</a></li>
-              <li><a href="">Contact Us</a></li>
-              <li><a href="">Privacy Policy</a></li>
-              <li><a href="">Terms & Conditions</a></li>
+              <li><a href="#">About Us</a></li>
+              <li><a href="#">Contact Us</a></li>
+              <li><a href="#">Privacy Policy</a></li>
+              <li><a href="#">Terms & Conditions</a></li>
             </ul>
           </nav>
         </div>
