@@ -12,7 +12,7 @@ import torch
 import difflib
 from flask_socketio import SocketIO, send
 app = Flask(__name__) 
-CORS(app)
+CORS(app,resources={r"/transcribe": {"origins": "*"}})
 
 socketio = SocketIO(app, cors_allowed_origins="*",async_mode="eventlet")  # Initialize SocketIO
 
@@ -76,7 +76,6 @@ def transcribe_audio():
 
     audio_file = request.files['audio']
     # Process the audio file (e.g., transcribe it)
-    print(audio_file)
     
     # Load the audio file using pydub
     audio = AudioSegment.from_file(audio_file)
@@ -87,7 +86,6 @@ def transcribe_audio():
     # Load audio with librosa
     speech_array, original_sampling_rate = librosa.load(save_path, sr=None)
         
-    print(speech_array)
 
     # Normalize audio levels
     speech_array = speech_array / np.max(np.abs(speech_array))
@@ -99,10 +97,6 @@ def transcribe_audio():
     # Convert audio to floating-point
     speech_array = speech_array.astype(np.float32)
     
-    
-    print(f"Is CUDA available: {torch.cuda.is_available()}")
-    print(f"Number of CUDA devices: {torch.cuda.device_count()}")
-    print(f"Current CUDA device: {torch.cuda.current_device()}")
     
    # Resample audio
     target_sampling_rate = 16000
@@ -121,8 +115,6 @@ def transcribe_audio():
     except Exception as e:
         print(f"Error during feature extraction or CUDA transfer: {e}")
 
-    # You may add noise reduction here if needed
-    print(f"Code reached this point = > {input_features}")
     
     with torch.cuda.amp.autocast():
         predicted_ids = model.generate(input_features=input_features)
@@ -130,6 +122,8 @@ def transcribe_audio():
     torch.cuda.empty_cache()
     
     transcription = processor.tokenizer.decode(predicted_ids[0], skip_special_tokens=True)
+    
+    print(f'This is the original transcription : {transcription}')
     
   # Load the verses from the text file (Assuming each verse is in a row)
     verse_file_path = 'verses.txt'  # Replace this with the actual path to your verse file
