@@ -10,6 +10,7 @@ import soundfile as sf  # Use soundfile to save audio
 from flask_cors import CORS
 import torch
 import difflib
+from io import BytesIO
 from flask_socketio import SocketIO, send ,emit
 app = Flask(__name__) 
 CORS(app,resources={r"/transcribe": {"origins": "*"}})
@@ -137,22 +138,20 @@ def transcribe_audio():
     # Send the final transcription back to the client
     return jsonify({'text': final_transcription})
     
-# Handle WebSocket connections for audio chunks
+# Handle incoming audio chunks in real-time
 @socketio.on('audio_chunk')
-def handle_audio_chunk(audio_chunk):
+def handle_audio_chunk(audio_client):
     try:
-        
-        print(f'This is the audio chunks : {audio_chunk}')
-        # Save audio chunk to file (for this example, we concatenate into one audio file)
-        save_path = 'received_audio.wav'
-        with open(save_path, 'ab') as f:
-            f.write(audio_chunk)  # Append audio chunk to the file
-
+            
         # Load the audio file using pydub
-        audio = AudioSegment.from_file(save_path)
-
-        # Convert and process audio
+        audio = AudioSegment.from_file(audio_client)
+            
+        # Save the audio file in a specified format (e.g., WAV)
+        save_path =  'saved_audio.wav'
+        audio.export(save_path, format='wav')
+        # Load audio with librosa
         speech_array, original_sampling_rate = librosa.load(save_path, sr=None)
+                
 
         # Normalize audio levels
         speech_array = speech_array / np.max(np.abs(speech_array))
@@ -163,41 +162,31 @@ def handle_audio_chunk(audio_chunk):
 
         # Convert audio to floating-point
         speech_array = speech_array.astype(np.float32)
-
-        # Resample audio if needed
+            
+            
+        # Resample audio
         target_sampling_rate = 16000
         if original_sampling_rate != target_sampling_rate:
             speech_array = librosa.resample(speech_array, orig_sr=original_sampling_rate, target_sr=target_sampling_rate)
 
-        # Feature extraction and move to CUDA
-        print("Extracting features and moving to CUDA...")
+        # Process audio with the model
         input_features = processor.feature_extractor(
-            speech_array, 
-            sampling_rate=target_sampling_rate, 
-            return_tensors="pt"
+        speech_array, 
+        sampling_rate=target_sampling_rate, 
+        return_tensors="pt"
         ).input_features.to("cuda")
-        print("Features exported to CUDA successfully.")
-        
-        # Run the model and generate predictions
+
         with torch.cuda.amp.autocast():
             predicted_ids = model.generate(input_features=input_features)
 
         torch.cuda.empty_cache()
 
-        # Decode the predictions into text
+        # Decode the transcription
         transcription = processor.tokenizer.decode(predicted_ids[0], skip_special_tokens=True)
-        print(f'This is the original transcription: {transcription}')
+        print(f"Transcription for the chunk: {transcription}")
 
-        # Load the verses from the text file (Assuming each verse is in a row)
-        verse_file_path = 'verses.txt'  # Replace this with the actual path to your verse file
-        verses = load_verses(verse_file_path)
-
-        # Compare transcription with the closest verse from the file
-        final_transcription = find_best_match(transcription, verses, max_diff=5)
-        print(f"Final transcription: {final_transcription}")
-
-        # Send the transcription back to the client in real-time
-        emit('transcription_result', {'text': final_transcription})
+        # Emit transcription result to the client
+        emit('transcription_result', {'text': transcription})
 
     except Exception as e:
         emit('transcription_error', {'error': str(e)})
