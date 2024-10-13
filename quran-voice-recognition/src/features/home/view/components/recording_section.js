@@ -1,37 +1,70 @@
-import React, { useState, useRef } from 'react';
-import DotLoader from '../../../../components/dot_loader';
+import React, { useState, useRef,useEffect } from 'react';
+import DotLoader from '../../../../components/dot_loader'; 
+import io from 'socket.io-client';
 
+
+const socket = io('http://127.0.0.1:5000');
 const RecordingSection = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [transcription, setTranscription] = useState('Transcription will appear here...');
   const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
+  const audioChunksRef = useRef([]); 
 
-  // Function to start recording
-  const startRecording = async () => {
-    setIsLoading(true)
+   // Set up Socket.IO connection and event listeners
+   useEffect(() => {
+    // Listen for transcription results from the server
+    socket.on('transcription_result', (data) => {
+      setTranscription((prev) => prev + ' ' + data.text);  // Append live transcription
+      setIsLoading(false);
+    });
+
+    // Listen for errors from the server
+    socket.on('transcription_error', (data) => {
+      setTranscription(data.error);
+      setIsLoading(false);
+
+      
+    });
+
+    return () => {
+      socket.off('transcription_result');
+      socket.off('transcription_error');
+    };
+  }, []);
+
+   // Function to start recording
+   const startRecording = async () => {
+    setIsLoading(true);
+    setTranscription("");
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    mediaRecorderRef.current = new MediaRecorder(stream);
-    
-    mediaRecorderRef.current.start();
-    setIsRecording(true);
-    
-    mediaRecorderRef.current.ondataavailable = (event) => {
-      audioChunksRef.current.push(event.data);
-    };
+    mediaRecorderRef.current = new MediaRecorder(stream, { mimeType: 'audio/webm' });
 
-    // Move the `sendAudioToServer` call to the stop function
-    mediaRecorderRef.current.onstop = async () => {
-      // Send the audio to the server when recording stops
-      await sendAudioToServer();
+    mediaRecorderRef.current.start(1000);  // Start recording and capture audio chunks every 100 milliseconds
+    setIsRecording(true);
+
+    // Send audio chunks to the server as they become available
+    mediaRecorderRef.current.ondataavailable = (event) => {
+        const audioBlob = event.data;
+        const reader = new FileReader();
+
+        reader.onloadend = () => {
+            const arrayBuffer = reader.result;
+            console.log("recieved audio chunk",arrayBuffer)
+            socket.emit('audio_chunk', arrayBuffer);  // Send binary audio data to the server in real time
+        };
+
+        reader.readAsArrayBuffer(audioBlob);  // Read blob as ArrayBuffer
     };
-  };
+};
+
 
   // Function to stop recording
   const stopRecording = () => {
+    socket.disconnect();
     mediaRecorderRef.current.stop();
     setIsRecording(false);
+    setIsLoading(false);
     
   };
 
