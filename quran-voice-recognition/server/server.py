@@ -37,7 +37,7 @@ def load_verses(file_path):
         verses = [line.strip() for line in file.readlines()]
     return verses
 
-def find_best_match(transcription, verses, max_diff=3):
+def find_best_match(transcription, verses, max_diff=7):
     """Find the verse with the closest match to the transcription."""
     best_match = None
     best_score = float('inf')  # Initialize with a high score
