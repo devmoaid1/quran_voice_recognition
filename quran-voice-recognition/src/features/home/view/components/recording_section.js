@@ -77,32 +77,32 @@ const sendAudioToServer = async () => {
 };
 
 
-  return (
-    <section className="flex flex-col items-center gap-20 py-20 mb-24">
+return (
+  <section className="flex flex-col items-center gap-20 py-20 mb-24">
     <h2 className="text-2xl font-bold">Start Reciting!</h2>
-    <div className="relative" id="audio-form">
-      <div className="relative p-2 pr-16 border rounded-full box-border border-black text-right text-2xl w-[38rem] h-[3rem] flex items-center justify-between">
+    <div className="relative w-full max-w-md" id="audio-form">
+      <div className="relative p-2 pr-16 border rounded-full box-border border-black text-right text-2xl h-[3rem] flex items-center justify-between">
         {isLoading ? (
           // Show the DotLoader when recording is active, centered inside the input container
-          <div className="flex items-center justify-center w-full">
+          <div className="flex items-center justify-center w-full h-full">
             <DotLoader />
           </div>
         ) : (
           // Show the input field text when not recording
           <input
-            className="w-full h-full border-none outline-none text-right bg-transparent py-40"
+            className="w-full h-full border-none outline-none text-right bg-transparent"
             type="text"
             value={transcription}
             readOnly
           />
         )}
-  
+
         {/* The record button positioned absolutely relative to the input or loader */}
         <button
           id="record-button"
           type="button"
           onClick={isRecording ? stopRecording : startRecording}
-          className="btn absolute right-0 top-0 h-full aspect-square scale-[102%] rounded-full" // Added rounded-full class
+          className="btn absolute right-0 top-0 h-full aspect-square scale-[102%] rounded-full"
         >
           {isRecording ? (
             <svg
@@ -130,9 +130,7 @@ const sendAudioToServer = async () => {
       </div>
     </div>
   </section>
-  
-
-  );
+);
 };
 
 export default RecordingSection;
