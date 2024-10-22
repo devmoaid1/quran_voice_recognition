@@ -31,33 +31,28 @@ def save_wav_file(audio_data, filename, channels=1, rate=16000):
         wav_file.setframerate(rate)
         wav_file.writeframes(audio_data) 
         
-def load_words(file_path):
-    """Load words from a text file into a list."""
+def load_verses(file_path):
+    """Load verses from a text file into a list."""
     with open(file_path, 'r', encoding='utf-8') as file:
-        words = [line.strip() for line in file.readlines()]
-    return words
+        verses = [line.strip() for line in file.readlines()]
+    return verses
 
-def find_closest_word(transcription_word, words):
-    """Find the closest matching word to the given transcription word."""
+def find_best_match(transcription, verses, max_diff=7):
+    """Find the verse with the closest match to the transcription."""
     best_match = None
-    best_score = 0.0  # Similarity score, initialized to 0 (lower bound)
+    best_score = float('inf')  # Initialize with a high score
 
-    for word in words:
-        diff = difflib.SequenceMatcher(None, transcription_word, word)
+    for verse in verses:
+        diff = difflib.SequenceMatcher(None, transcription, verse)
         similarity = diff.ratio()
+        distance = len(verse) * (1 - similarity)  # Approximate the number of different characters
 
-        if similarity > best_score:
-            best_score = similarity
-            best_match = word
+        if distance < best_score and distance <= max_diff:
+            best_score = distance
+            best_match = verse
 
-    return best_match if best_match else transcription_word  # Return the best match or the original transcription
+    return best_match if best_match else transcription  # Return the best match or the original transcription
         
-
-def map_transcription_words(transcription, words):
-    """Map each word from transcription to the closest word in the word list."""
-    transcription_words = transcription.split()
-    mapped_transcription = [find_closest_word(word, words) for word in transcription_words]
-    return ' '.join(mapped_transcription)
         
 @app.route('/transcribe', methods=['POST'])
 def transcribe_audio():
@@ -115,12 +110,12 @@ def transcribe_audio():
     
     print(f'This is the original transcription : {transcription}')
     
-  # Load the words from the new word file
-    word_file_path = 'words_ama.txt'  # Replace this with the actual path to your word file
-    words = load_words(word_file_path)
+  # Load the verses from the text file (Assuming each verse is in a row)
+    verse_file_path = 'verses.txt'  # Replace this with the actual path to your verse file
+    verses = load_verses(verse_file_path)
 
-    # Map each word from the transcription to the closest word in the word file
-    final_transcription = map_transcription_words(transcription, words)
+    # Compare transcription with the closest verse from the file
+    final_transcription = find_best_match(transcription, verses, max_diff=5)
     
     print(f"Final transcription: {final_transcription}")
 
