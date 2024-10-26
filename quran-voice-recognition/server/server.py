@@ -1,15 +1,16 @@
-from flask import Flask, request, jsonify
-from pydub import AudioSegment
 import os
+import wave 
+import torch 
+import difflib # Import difflib to compare strings
+import librosa 
 import tempfile
-from transformers import WhisperProcessor, WhisperForConditionalGeneration
-import librosa
-import numpy as np
-import wave
-import soundfile as sf  # Use soundfile to save audio 
-from flask_cors import CORS
-import torch
-import difflib  # Import difflib to compare strings
+import   numpy       as np
+import soundfile     as sf  # Use soundfile to save audio 
+from   flask_cors  import CORS
+from     pydub     import AudioSegment
+from     flask     import Flask, request, jsonify
+from  transformers import WhisperProcessor, WhisperForConditionalGeneration
+
 app = Flask(__name__) 
 CORS(app,resources={r"/transcribe": {"origins": "*"}})
 
