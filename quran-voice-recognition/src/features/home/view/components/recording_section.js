@@ -1,6 +1,10 @@
 import React, { useState, useRef } from 'react';
 import DotLoader from '../../../../components/dot_loader';
+import { surahDict } from '../../../../core/constants/constants';
 
+
+const hostedServerUrl='https://mahfouz.site/transcribe';
+const localServerUrl="https://6ecf-34-32-150-127.ngrok-free.app/";
 const RecordingSection = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -48,10 +52,16 @@ const sendAudioToServer = async () => {
   formData.append('audio', audioBlob, 'audio.wav');
 
   try {
+
+    
     // Make the POST request to the server
-    const response = await fetch('https://mahfouz.site/transcribe', {
+    const response = await fetch(localServerUrl+'transcribe', {
       method: 'POST',
       body: formData,
+      headers: {
+        "ngrok-skip-browser-warning": "true",
+        "Surah-Name": surahDict['الإخلاص'],
+      }
     });
 
     // Check if the response is okay (status code 200-299)
