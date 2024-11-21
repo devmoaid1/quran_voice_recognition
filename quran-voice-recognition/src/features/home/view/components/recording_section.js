@@ -4,7 +4,7 @@ import { surahDict } from '../../../../core/constants/constants';
 
 
 const hostedServerUrl='https://mahfouz.site/transcribe';
-const localServerUrl="https://6ecf-34-32-150-127.ngrok-free.app/";
+const localServerUrl="https://975a-34-148-53-210.ngrok-free.app/";
 const RecordingSection = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
