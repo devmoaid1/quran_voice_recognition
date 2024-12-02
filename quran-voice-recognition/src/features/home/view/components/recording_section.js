@@ -3,7 +3,7 @@ import DotLoader from '../../../../components/dot_loader';
 import { surahDict } from '../../../../core/constants/constants';
 
 const hostedServerUrl = 'https://mahfouz.site/transcribe';
-const localServerUrl = "https://ad41-34-125-181-139.ngrok-free.app/";
+const localServerUrl = "https://6c53-35-187-236-84.ngrok-free.app/";
 
 const RecordingSection = () => {
   const [isRecording, setIsRecording] = useState(false);
@@ -20,22 +20,27 @@ const RecordingSection = () => {
 
   // Function to start recording
   const startRecording = async () => {
-    setIsLoading(true);
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    mediaRecorderRef.current = new MediaRecorder(stream);
+    try {
+      setIsLoading(true);
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorderRef.current = new MediaRecorder(stream);
 
-    mediaRecorderRef.current.start();
-    setIsRecording(true);
+      mediaRecorderRef.current.start();
+      setIsRecording(true);
 
-    mediaRecorderRef.current.ondataavailable = (event) => {
-      audioChunksRef.current.push(event.data);
-    };
+      mediaRecorderRef.current.ondataavailable = (event) => {
+        audioChunksRef.current.push(event.data);
+      };
 
-    // Move the `sendAudioToServer` call to the stop function
-    mediaRecorderRef.current.onstop = async () => {
-      // Send the audio to the server when recording stops
-      await sendAudioToServer();
-    };
+      mediaRecorderRef.current.onstop = async () => {
+        // Send the audio to the server when recording stops
+        await sendAudioToServer();
+      };
+    } catch (error) {
+      console.error('Error accessing audio device:', error);
+      alert('Unable to access the microphone. Please ensure it is connected and try again.');
+      setIsLoading(false);
+    }
   };
 
   // Function to stop recording
@@ -48,7 +53,6 @@ const RecordingSection = () => {
   const sendAudioToServer = async () => {
     console.log("Sending audio to server...");
 
-    // Create a Blob from the audio chunks
     const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
     audioChunksRef.current = []; // Clear the chunks after sending
 
@@ -56,36 +60,33 @@ const RecordingSection = () => {
     formData.append('audio', audioBlob, 'audio.wav');
 
     try {
-      // Make the POST request to the server
-      const response = await fetch(localServerUrl + 'transcribe', {
-        method: 'POST',
-        body: formData,
-        headers: {
-          "ngrok-skip-browser-warning": "true",
-          "Surah-Name": selectedSurah || 'الإخلاص', // Use the selected Surah or a default one
+        const response = await fetch(localServerUrl + 'transcribe', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                "ngrok-skip-browser-warning": "true",
+                "Surah-Name": selectedSurah || 'الإخلاص', // Use the selected Surah or default one
+            }
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
         }
-      });
 
-      // Check if the response is okay (status code 200-299)
-      if (!response.ok) {
-        const errorText = await response.text(); // Get the error text from the response
-        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
-      }
+        const data = await response.json();
+        console.log(data);
 
-      // Parse the response as JSON
-      const data = await response.json();
-      console.log(data);
-
-      // Update the transcription state with the received text
-      setTranscription(data['text']);
+        // Set the transcription from the server response
+        setTranscription(data['original_transcription'] || 'No transcription received.');
     } catch (error) {
-      console.error('Error sending audio to server:', error);
-      alert('Failed to send audio to server. Please try again.');
+        console.error('Error sending audio to server:', error);
+        setTranscription('Failed to process transcription.');
     } finally {
-      // Always set loading to false once the request completes, regardless of success or failure
-      setIsLoading(false);
+        setIsLoading(false);
     }
   };
+
 
   return (
     <section className="flex flex-col items-center gap-10 py-10 mb-24">
@@ -117,12 +118,10 @@ const RecordingSection = () => {
       <div className="relative w-full max-w-md" id="audio-form">
         <div className="relative p-2 pr-16 border rounded-full box-border border-black text-right text-2xl h-[3rem] flex items-center justify-between">
           {isLoading ? (
-            // Show the DotLoader when recording is active, centered inside the input container
             <div className="flex items-center justify-center w-full h-full">
               <DotLoader />
             </div>
           ) : (
-            // Show the input field text when not recording
             <input
               className="w-full h-full border-none outline-none text-right bg-transparent"
               type="text"
@@ -131,7 +130,6 @@ const RecordingSection = () => {
             />
           )}
 
-          {/* The record button positioned absolutely relative to the input or loader */}
           <button
             id="record-button"
             type="button"

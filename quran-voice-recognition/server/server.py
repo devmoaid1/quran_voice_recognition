@@ -123,8 +123,6 @@ def transcribe_audio():
     return jsonify({'text': final_transcription})
     
 
-
-
 if __name__ == '__main__':
     # # Create the 'saved_audios' directory if it doesn't exist
     # os.makedirs('saved_audios', exist_ok=True)
