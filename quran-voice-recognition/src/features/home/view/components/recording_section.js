@@ -3,12 +3,13 @@ import DotLoader from '../../../../components/dot_loader';
 import { surahDict } from '../../../../core/constants/constants';
 
 const hostedServerUrl = 'https://mahfouz.site/transcribe';
-const localServerUrl = "https://6c53-35-187-236-84.ngrok-free.app/";
+const localServerUrl = "https://c7ed-34-87-162-149.ngrok-free.app/";
 
 const RecordingSection = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [transcription, setTranscription] = useState('Transcription will appear here...');
+  const [mismatches, setMismatches] = useState([]); // Track mismatched words
   const [selectedSurah, setSelectedSurah] = useState(''); // Track the selected Surah
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -52,41 +53,53 @@ const RecordingSection = () => {
   // Function to send audio to the server
   const sendAudioToServer = async () => {
     console.log("Sending audio to server...");
-
+  
     const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
     audioChunksRef.current = []; // Clear the chunks after sending
-
+  
     const formData = new FormData();
     formData.append('audio', audioBlob, 'audio.wav');
-
+  
     try {
-        const response = await fetch(localServerUrl + 'transcribe', {
-            method: 'POST',
-            body: formData,
-            headers: {
-                "ngrok-skip-browser-warning": "true",
-                "Surah-Name": selectedSurah || 'الإخلاص', // Use the selected Surah or default one
-            }
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+      const response = await fetch(localServerUrl + 'transcribe', {
+        method: 'POST',
+        body: formData,
+        headers: {
+          "ngrok-skip-browser-warning": "true",
+          "Surah-Name": selectedSurah || 'الإخلاص', // Use the selected Surah or default one
         }
-
-        const data = await response.json();
-        console.log(data);
-
-        // Set the transcription from the server response
-        setTranscription(data['original_transcription'] || 'No transcription received.');
+      });
+  
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+      }
+  
+      const data = await response.json();
+      console.log(data);
+  
+      // Update transcription and mismatches from the server response
+      const transcriptionText = data['mapped_transcription'] || 'No transcription received.';
+      const mismatchedWords = data['mismatched_words'] || [];
+  
+      setTranscription(transcriptionText); // Update transcription state
+  
+      // Format mismatches for display
+      setMismatches(
+        mismatchedWords.length > 0
+          ? mismatchedWords.join(', ') // Join mismatches into a readable format
+          : 'No mismatches detected'
+      );
+  
     } catch (error) {
-        console.error('Error sending audio to server:', error);
-        setTranscription('Failed to process transcription.');
+      console.error('Error sending audio to server:', error);
+      setTranscription('Failed to process transcription.');
+      setMismatches('Failed to detect mismatches.');
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
   };
-
+  
 
   return (
     <section className="flex flex-col items-center gap-10 py-10 mb-24">
@@ -160,6 +173,27 @@ const RecordingSection = () => {
             )}
           </button>
         </div>
+
+        {/* Display mismatched words */}
+        {/* {mismatches.length > 0 && (
+          <div className="mt-4 text-left">
+            <h3 className="text-lg font-semibold">Mismatched Words:</h3>
+            <ul className="list-disc list-inside">
+              {mismatches.map(([original, corrected], index) => (
+                <li key={index}>
+                  <strong>{original}</strong> → {corrected}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )} */}
+        {/* Display mismatched words */}
+        {mismatches && (
+          <div className="mt-4 text-left">
+            <h3 className="text-lg font-semibold">Mismatched Words:</h3>
+              <p>{mismatches}</p> {/* Display mismatches as a readable string */}
+          </div>
+        )}
       </div>
     </section>
   );
