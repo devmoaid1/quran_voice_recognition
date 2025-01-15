@@ -3,7 +3,7 @@ import DotLoader from '../../../../components/dot_loader';
 import { surahDict } from '../../../../core/constants/constants';
 
 const hostedServerUrl = 'https://mahfouz.site/transcribe';
-const localServerUrl = "https://c7ed-34-87-162-149.ngrok-free.app/";
+const localServerUrl = "https://d9bb-35-233-191-184.ngrok-free.app/";
 
 const RecordingSection = () => {
   const [isRecording, setIsRecording] = useState(false);
