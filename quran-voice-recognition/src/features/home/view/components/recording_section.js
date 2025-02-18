@@ -1,105 +1,82 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { io } from 'socket.io-client'; // Changed to Socket.IO client
 import DotLoader from '../../../../components/dot_loader';
 import { surahDict } from '../../../../core/constants/constants';
 
-const hostedServerUrl = 'https://mahfouz.site/transcribe';
-const localServerUrl = "https://d9bb-35-233-191-184.ngrok-free.app/";
+const localServerUrl = "https://84e9-34-126-114-33.ngrok-free.app/";
 
 const RecordingSection = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [transcription, setTranscription] = useState('Transcription will appear here...');
-  const [mismatches, setMismatches] = useState([]); // Track mismatched words
-  const [selectedSurah, setSelectedSurah] = useState(''); // Track the selected Surah
+  const [mismatches, setMismatches] = useState([]);
+  const [selectedSurah, setSelectedSurah] = useState('');
   const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
+  const socketRef = useRef(null);
 
-  // Function to handle Surah selection
+  // WebSocket setup with Socket.IO
+  useEffect(() => {
+    socketRef.current = io(localServerUrl, {
+      transports: ['websocket'], // Force WebSocket transport
+      reconnection: true,
+      extraHeaders: {
+        "ngrok-skip-browser-warning": "true"
+      }
+    });
+
+    socketRef.current.on('connect', () => {
+      console.log('WebSocket connected');
+    });
+
+    socketRef.current.on('transcription', (data) => {
+      setTranscription(prev => `${prev} ${data.transcription}`);
+      setMismatches(prev => [...prev, ...data.mismatched_words]);
+    });
+
+    return () => {
+      if (socketRef.current.connected) {
+        socketRef.current.disconnect();
+      }
+    };
+  }, []);
+
   const handleSurahChange = (event) => {
     setSelectedSurah(event.target.value);
   };
 
-  // Function to start recording
   const startRecording = async () => {
     try {
       setIsLoading(true);
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorderRef.current = new MediaRecorder(stream);
+      
+      // Send Surah selection
+      socketRef.current.emit('start_recording', {
+        surah: selectedSurah || 'الإخلاص'
+      });
 
-      mediaRecorderRef.current.start();
-      setIsRecording(true);
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorderRef.current = new MediaRecorder(stream, { mimeType: 'audio/webm' });
 
       mediaRecorderRef.current.ondataavailable = (event) => {
-        audioChunksRef.current.push(event.data);
-      };
-
-      mediaRecorderRef.current.onstop = async () => {
-        // Send the audio to the server when recording stops
-        await sendAudioToServer();
-      };
-    } catch (error) {
-      console.error('Error accessing audio device:', error);
-      alert('Unable to access the microphone. Please ensure it is connected and try again.');
-      setIsLoading(false);
-    }
-  };
-
-  // Function to stop recording
-  const stopRecording = () => {
-    mediaRecorderRef.current.stop();
-    setIsRecording(false);
-  };
-
-  // Function to send audio to the server
-  const sendAudioToServer = async () => {
-    console.log("Sending audio to server...");
-  
-    const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-    audioChunksRef.current = []; // Clear the chunks after sending
-  
-    const formData = new FormData();
-    formData.append('audio', audioBlob, 'audio.wav');
-  
-    try {
-      const response = await fetch(localServerUrl + 'transcribe', {
-        method: 'POST',
-        body: formData,
-        headers: {
-          "ngrok-skip-browser-warning": "true",
-          "Surah-Name": selectedSurah || 'الإخلاص', // Use the selected Surah or default one
+        if (event.data.size > 0) {
+          socketRef.current.emit('audio_chunk', event.data); // Send as ArrayBuffer
         }
-      });
-  
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
-      }
-  
-      const data = await response.json();
-      console.log(data);
-  
-      // Update transcription and mismatches from the server response
-      const transcriptionText = data['mapped_transcription'] || 'No transcription received.';
-      const mismatchedWords = data['mismatched_words'] || [];
-  
-      setTranscription(transcriptionText); // Update transcription state
-  
-      // Format mismatches for display
-      setMismatches(
-        mismatchedWords.length > 0
-          ? mismatchedWords.join(', ') // Join mismatches into a readable format
-          : 'No mismatches detected'
-      );
-  
+      };
+
+      mediaRecorderRef.current.start(2000);
+      setIsRecording(true);
+
     } catch (error) {
-      console.error('Error sending audio to server:', error);
-      setTranscription('Failed to process transcription.');
-      setMismatches('Failed to detect mismatches.');
-    } finally {
+      console.error('Microphone error:', error);
       setIsLoading(false);
     }
   };
-  
+
+  const stopRecording = () => {
+    mediaRecorderRef.current?.stop();
+    setIsRecording(false);
+    setIsLoading(false);
+  };
+
 
   return (
     <section className="flex flex-col items-center gap-10 py-10 mb-24">
@@ -174,19 +151,6 @@ const RecordingSection = () => {
           </button>
         </div>
 
-        {/* Display mismatched words */}
-        {/* {mismatches.length > 0 && (
-          <div className="mt-4 text-left">
-            <h3 className="text-lg font-semibold">Mismatched Words:</h3>
-            <ul className="list-disc list-inside">
-              {mismatches.map(([original, corrected], index) => (
-                <li key={index}>
-                  <strong>{original}</strong> → {corrected}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )} */}
         {/* Display mismatched words */}
         {mismatches && (
           <div className="mt-4 text-left">
