@@ -1,125 +1,165 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { io } from 'socket.io-client'; // Changed to Socket.IO client
 import DotLoader from '../../../../components/dot_loader';
-import { surahDict } from '../../../../core/constants/constants';
+import io from 'socket.io-client';
 
-const localServerUrl = "https://84e9-34-126-114-33.ngrok-free.app/";
+// Initialize socket with additional options for better debugging
+const socket = io('https://dfba-34-16-173-222.ngrok-free.app/', {
+  reconnection: true,
+  reconnectionAttempts: 5,
+  reconnectionDelay: 1000,
+});
 
 const RecordingSection = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [transcription, setTranscription] = useState('Transcription will appear here...');
-  const [mismatches, setMismatches] = useState([]);
-  const [selectedSurah, setSelectedSurah] = useState('');
   const mediaRecorderRef = useRef(null);
-  const socketRef = useRef(null);
+  const audioChunksQueue = useRef([]);
+  const [processing, setProcessing] = useState(false);
 
-  // WebSocket setup with Socket.IO
+  // Socket event listeners
   useEffect(() => {
-    socketRef.current = io(localServerUrl, {
-      transports: ['websocket'], // Force WebSocket transport
-      reconnection: true,
-      extraHeaders: {
-        "ngrok-skip-browser-warning": "true"
-      }
+    console.log('useEffect mounting');
+
+    socket.on('connect', () => {
+      console.log('Connected to backend successfully');
     });
 
-    socketRef.current.on('connect', () => {
-      console.log('WebSocket connected');
+    socket.on('connect_error', (error) => {
+      console.error('Connection failed:', error.message);
+      console.error('Full error details:', JSON.stringify(error, null, 2));
     });
 
-    socketRef.current.on('transcription', (data) => {
-      setTranscription(prev => `${prev} ${data.transcription}`);
-      setMismatches(prev => [...prev, ...data.mismatched_words]);
+    socket.on('disconnect', (reason) => {
+      console.log('Disconnected from backend. Reason:', reason);
     });
 
+    socket.on('transcription_result', (data) => {
+      console.log('Transcription received:', data.text);
+      setTranscription((prev) => `${prev} ${data.text}`);
+      setIsLoading(false);
+      setProcessing(false);
+      processAudioQueue();
+    });
+
+    socket.on('transcription_error', (data) => {
+      console.error('Transcription error:', data);
+      setIsLoading(false);
+      setProcessing(false);
+      processAudioQueue();
+    });
+
+    // Cleanup
     return () => {
-      if (socketRef.current.connected) {
-        socketRef.current.disconnect();
-      }
+      console.log('useEffect cleaning up');
+      socket.off('connect');
+      socket.off('connect_error');
+      socket.off('disconnect');
+      socket.off('transcription_result');
+      socket.off('transcription_error');
     };
   }, []);
 
-  const handleSurahChange = (event) => {
-    setSelectedSurah(event.target.value);
+  // Log socket status
+  useEffect(() => {
+    console.log('Socket connected status:', socket.connected);
+  }, []);
+
+  // Function to process audio queue
+  const processAudioQueue = () => {
+    if (audioChunksQueue.current.length > 0 && !processing) {
+      setProcessing(true);
+      const audioBlob = audioChunksQueue.current.shift();
+      const reader = new FileReader();
+
+      reader.onloadend = () => {
+        const arrayBuffer = reader.result;
+        console.log('Received ArrayBuffer:', {
+          byteLength: arrayBuffer.byteLength,
+          type: arrayBuffer.constructor.name,
+        });
+        socket.emit('audio_chunk', arrayBuffer);
+      };
+
+      reader.readAsArrayBuffer(audioBlob);
+    }
   };
 
+  // Function to start recording
   const startRecording = async () => {
+    setIsLoading(true);
+    setTranscription('');
     try {
-      setIsLoading(true);
-      
-      // Send Surah selection
-      socketRef.current.emit('start_recording', {
-        surah: selectedSurah || 'الإخلاص'
-      });
-
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorderRef.current = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      console.log('Media stream settings:', stream.getAudioTracks()[0].getSettings());
+
+      let mimeType;
+      const supportedTypes = [
+        'audio/webm; codecs=opus',
+        'audio/ogg; codecs=opus',
+        'audio/webm',
+        'audio/ogg',
+      ];
+      for (const type of supportedTypes) {
+        if (MediaRecorder.isTypeSupported(type)) {
+          mimeType = type;
+          break;
+        }
+      }
+      if (!mimeType) {
+        console.error('No supported MIME type found for MediaRecorder');
+        setIsLoading(false);
+        return;
+      }
+      console.log('Using MIME type:', mimeType);
+
+      mediaRecorderRef.current = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current.start(1000); // Split into 1-second chunks
+      setIsRecording(true);
 
       mediaRecorderRef.current.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          socketRef.current.emit('audio_chunk', event.data); // Send as ArrayBuffer
+        console.log('Chunk size:', event.data.size, 'MIME type:', mediaRecorderRef.current.mimeType);
+        audioChunksQueue.current.push(event.data);
+        if (!processing) {
+          processAudioQueue();
         }
       };
 
-      mediaRecorderRef.current.start(2000);
-      setIsRecording(true);
-
+      mediaRecorderRef.current.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop()); // Clean up audio stream
+      };
     } catch (error) {
-      console.error('Microphone error:', error);
+      console.error('Error starting recording:', error);
       setIsLoading(false);
     }
   };
 
+  // Function to stop recording
   const stopRecording = () => {
-    mediaRecorderRef.current?.stop();
-    setIsRecording(false);
-    setIsLoading(false);
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      setIsLoading(false);
+    }
   };
 
-
   return (
-    <section className="flex flex-col items-center gap-10 py-10 mb-24">
+    <section className="flex flex-col items-center gap-20 py-20 mb-24">
       <h2 className="text-2xl font-bold">Start Reciting!</h2>
-
-      {/* Dropdown List */}
-      <div className="w-full max-w-md text-center">
-        <label htmlFor="surah-dropdown" className="block text-lg font-semibold mb-2">
-          Select a Surah:
-        </label>
-        <select
-          id="surah-dropdown"
-          className="w-full p-2 border rounded"
-          value={selectedSurah}
-          onChange={handleSurahChange}
-        >
-          <option value="" disabled>
-            -- Choose a Surah --
-          </option>
-          {Object.keys(surahDict).map((key) => (
-            <option key={key} value={surahDict[key]}>
-              {surahDict[key]}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Recording Section */}
-      <div className="relative w-full max-w-md" id="audio-form">
-        <div className="relative p-2 pr-16 border rounded-full box-border border-black text-right text-2xl h-[3rem] flex items-center justify-between">
+      <div className="relative" id="audio-form">
+        <div className="relative p-2 pr-16 border rounded-full box-border border-black text-right text-2xl w-[38rem] h-[3rem] flex items-center justify-between">
           {isLoading ? (
-            <div className="flex items-center justify-center w-full h-full">
+            <div className="flex items-center justify-center w-full">
               <DotLoader />
             </div>
           ) : (
             <input
-              className="w-full h-full border-none outline-none text-right bg-transparent"
+              className="w-full h-full border-none outline-none text-right bg-transparent py-40"
               type="text"
               value={transcription}
               readOnly
             />
           )}
-
           <button
             id="record-button"
             type="button"
@@ -150,14 +190,6 @@ const RecordingSection = () => {
             )}
           </button>
         </div>
-
-        {/* Display mismatched words */}
-        {mismatches && (
-          <div className="mt-4 text-left">
-            <h3 className="text-lg font-semibold">Mismatched Words:</h3>
-              <p>{mismatches}</p> {/* Display mismatches as a readable string */}
-          </div>
-        )}
       </div>
     </section>
   );
