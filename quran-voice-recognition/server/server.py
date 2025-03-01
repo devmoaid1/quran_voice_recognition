@@ -10,9 +10,13 @@ from   flask_cors  import CORS
 from     pydub     import AudioSegment
 from     flask     import Flask, request, jsonify
 from  transformers import WhisperProcessor, WhisperForConditionalGeneration
+from io import BytesIO
+from flask_socketio import SocketIO, emit
 
 app = Flask(__name__) 
-CORS(app,resources={r"/transcribe": {"origins": "*"}})
+
+socketio = SocketIO(app, cors_allowed_origins="*")
+# CORS(app,resources={r"/transcribe": {"origins": "*"}})
 
 
 processor = WhisperProcessor.from_pretrained("distil_whisper_large_ama")
@@ -59,6 +63,74 @@ def map_transcription_words(transcription, words):
     transcription_words = transcription.split()
     mapped_transcription = [find_closest_word(word, words) for word in transcription_words]
     return ' '.join(mapped_transcription)
+
+
+@socketio.on('live_audio')
+def handle_live_audio(data):
+    # Expecting 'audio' key in the data payload containing the raw binary audio chunk.
+    if 'audio' not in data:
+        emit('live_transcription', {'error': 'No audio data received'})
+        return
+
+    # Convert the incoming audio data (assumed to be binary) into a BytesIO object.
+    audio_chunk = data['audio']
+    audio_file = BytesIO(audio_chunk)
+    
+    # Convert to WAV in-memory using pydub.
+    audio_segment = AudioSegment.from_file(audio_file)
+    wav_buffer = BytesIO()
+    audio_segment.export(wav_buffer, format="wav")
+    wav_buffer.seek(0)
+    
+    # Load the audio using librosa.
+    speech_array, original_sampling_rate = librosa.load(
+        wav_buffer,
+        sr=16000,          # Force target sample rate
+        mono=True,          # Force mono conversion
+        dtype=np.float32,   # Match training dtype
+        res_type='soxr_hq'  # Use high-quality resampling
+    )
+    
+    # Resample if necessary.
+    target_sampling_rate = 16000
+    if original_sampling_rate != target_sampling_rate:
+        speech_array = librosa.resample(
+            speech_array,
+            orig_sr=original_sampling_rate,
+            target_sr=target_sampling_rate,
+            res_type="kaiser_best"
+        )
+    
+    try:
+        print("Extracting features and moving to CUDA for live audio...")
+        input_features = processor.feature_extractor(
+            speech_array, 
+            sampling_rate=target_sampling_rate, 
+            return_tensors="pt"
+        ).input_features.to("cuda")
+        print("Features exported to CUDA successfully for live audio.")
+    except Exception as e:
+        error_message = f"Error during feature extraction or CUDA transfer in live transcription: {e}"
+        print(error_message)
+        emit('live_transcription', {'error': error_message})
+        return
+    
+    # Generate transcription.
+    with torch.cuda.amp.autocast():
+        predicted_ids = model.generate(input_features=input_features)
+    torch.cuda.empty_cache()
+    
+    transcription = processor.tokenizer.decode(predicted_ids[0], skip_special_tokens=True)
+    print(f'Live transcription: {transcription}')
+    
+    # Optionally, if you want to perform word mapping as in your /transcribe endpoint:
+    word_file_path = 'words_ama.txt'
+    words = load_words(word_file_path)
+    final_transcription = map_transcription_words(transcription, words)
+    print(f"Final live transcription: {final_transcription}")
+    
+    # Emit the transcription back to the client.
+    emit('live_transcription', {'text': transcription})
         
 @app.route('/transcribe', methods=['POST'])
 def transcribe_audio():
@@ -66,33 +138,25 @@ def transcribe_audio():
         return jsonify({'error': 'No audio file provided'}), 400
 
     audio_file = request.files['audio']
-    # Process the audio file (e.g., transcribe it)
     
-    # Load the audio file using pydub
-    audio = AudioSegment.from_file(audio_file)
+    # Convert to WAV in-memory
+    audio_segment = AudioSegment.from_file(audio_file)
+    wav_buffer = BytesIO()
+    audio_segment.export(wav_buffer, format="wav")
+    wav_buffer.seek(0)
     
-     # Save the audio file in a specified format (e.g., WAV)
-    save_path =  'saved_audio.wav'
-    audio.export(save_path, format='wav')
-    # Load audio with librosa
-    speech_array, original_sampling_rate = librosa.load(save_path, sr=None)
-        
-
-    # Normalize audio levels
-    speech_array = speech_array / np.max(np.abs(speech_array))
-
-    # Ensure audio is single channel (mono)
-    if speech_array.ndim > 1:
-        speech_array = np.mean(speech_array, axis=1)
-
-    # Convert audio to floating-point
-    speech_array = speech_array.astype(np.float32)
-    
+    speech_array, original_sampling_rate = librosa.load(
+        wav_buffer,
+        sr=16000,          # Force target sample rate
+        mono=True,          # Force mono conversion
+        dtype=np.float32,   # Match training dtype
+        res_type='soxr_hq'  # Match libsndfile's resampling
+    )        
     
    # Resample audio
     target_sampling_rate = 16000
     if original_sampling_rate != target_sampling_rate:
-        speech_array = librosa.resample(speech_array, orig_sr=original_sampling_rate, target_sr=target_sampling_rate)
+        speech_array = librosa.resample(speech_array, orig_sr=original_sampling_rate, target_sr=target_sampling_rate,res_type="kaiser_best")
     
     
     try:
@@ -116,7 +180,7 @@ def transcribe_audio():
     
     print(f'This is the original transcription : {transcription}')
     
-  # Load the words from the new word file
+#   Load the words from the new word file
     word_file_path = 'words_ama.txt'  # Replace this with the actual path to your word file
     words = load_words(word_file_path)
 
@@ -126,7 +190,7 @@ def transcribe_audio():
     print(f"Final transcription: {final_transcription}")
 
     # Send the final transcription back to the client
-    return jsonify({'text': final_transcription})
+    return jsonify({'text': transcription})
     
 
 
@@ -134,4 +198,4 @@ def transcribe_audio():
 if __name__ == '__main__':
     # # Create the 'saved_audios' directory if it doesn't exist
     # os.makedirs('saved_audios', exist_ok=True)
-    app.run(host='0.0.0.0',port=5000,debug=True, use_reloader=False)  # Disable the use of reloader
+    socketio.run(app,host='0.0.0.0',port=5000,debug=True, use_reloader=False)  # Disable the use of reloader
