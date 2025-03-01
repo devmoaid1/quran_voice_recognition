@@ -1,5 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import io from 'socket.io-client';
 import DotLoader from '../../../../components/dot_loader';
+
+// Connect to your Socket.IO server
+const socket = io('http://127.0.0.1:5000')
 
 const RecordingSection = () => {
   const [isRecording, setIsRecording] = useState(false);
@@ -8,73 +12,117 @@ const RecordingSection = () => {
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
-  // Function to start recording
+  useEffect(() => {
+    // Listen for live transcription updates from the server
+    socket.on('live_transcription', (data) => {
+      // Append the new text to your current transcription
+      setTranscription((prev) => prev + ' ' + (data.text || ''));
+    });
+
+    return () => {
+      socket.off('live_transcription');
+    };
+  }, []);
+
   const startRecording = async () => {
-    setIsLoading(true)
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    mediaRecorderRef.current = new MediaRecorder(stream);
-    
-    mediaRecorderRef.current.start();
-    setIsRecording(true);
-    
-    mediaRecorderRef.current.ondataavailable = (event) => {
-      audioChunksRef.current.push(event.data);
-    };
+    setIsLoading(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Create MediaRecorder; default MIME type (e.g., audio/webm) is acceptable here.
+      mediaRecorderRef.current = new MediaRecorder(stream);
+      // Start recording and emit data every 2 seconds (2000 milliseconds)
+      mediaRecorderRef.current.start(2000);
+      setIsRecording(true);
 
-    // Move the `sendAudioToServer` call to the stop function
-    mediaRecorderRef.current.onstop = async () => {
-      // Send the audio to the server when recording stops
-      await sendAudioToServer();
-    };
+      mediaRecorderRef.current.ondataavailable = async (event) => {
+        if (event.data && event.data.size > 0) {
+          // Convert the blob to an ArrayBuffer before sending
+          const arrayBuffer = await event.data.arrayBuffer();
+          // Emit the audio chunk to the server
+          socket.emit('live_audio', { audio: arrayBuffer });
+        }
+      };
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      setIsLoading(false);
+    }
   };
 
-  // Function to stop recording
   const stopRecording = () => {
-    mediaRecorderRef.current.stop();
-    setIsRecording(false);
-    
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+    setIsLoading(false);
   };
+
+  // Function to start recording
+  // const startRecording = async () => {
+  //   setIsLoading(true)
+  //   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  //   mediaRecorderRef.current = new MediaRecorder(stream);
+    
+  //   mediaRecorderRef.current.start();
+  //   setIsRecording(true);
+    
+  //   mediaRecorderRef.current.ondataavailable = (event) => {
+  //     audioChunksRef.current.push(event.data);
+  //   };
+
+  //   // Move the `sendAudioToServer` call to the stop function
+  //   mediaRecorderRef.current.onstop = async () => {
+  //     // Send the audio to the server when recording stops
+  //     await sendAudioToServer();
+  //   };
+  // };
+
+  // // Function to stop recording
+  // const stopRecording = () => {
+  //   mediaRecorderRef.current.stop();
+  //   setIsRecording(false);
+    
+  // };
 
   // Function to send audio to the server
  // Function to send audio to the server
-const sendAudioToServer = async () => {
-  console.log("Sending audio to server...");
+// const sendAudioToServer = async () => {
+//   console.log("Sending audio to server...");
 
-  // Create a Blob from the audio chunks
-  const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-  audioChunksRef.current = []; // Clear the chunks after sending
+//   // Create a Blob from the audio chunks
+//   const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+//   audioChunksRef.current = []; // Clear the chunks after sending
 
-  const formData = new FormData();
-  formData.append('audio', audioBlob, 'audio.wav');
+//   const formData = new FormData();
+//   formData.append('audio', audioBlob, 'audio.wav');
 
-  try {
-    // Make the POST request to the server
-    const response = await fetch('http://127.0.0.1:5000/transcribe', {
-      method: 'POST',
-      body: formData,
-    });
+//   try {
+//     // Make the POST request to the server
+//     const response = await fetch('http://127.0.0.1:5000/transcribe', {
+//       method: 'POST',
+//       body: formData,
+//     });
 
-    // Check if the response is okay (status code 200-299)
-    if (!response.ok) {
-      const errorText = await response.text(); // Get the error text from the response
-      throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
-    }
+//     // Check if the response is okay (status code 200-299)
+//     if (!response.ok) {
+//       const errorText = await response.text(); // Get the error text from the response
+//       throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+//     }
 
-    // Parse the response as JSON
-    const data = await response.json();
-    console.log(data);
+//     // Parse the response as JSON
+//     const data = await response.json();
+//     console.log(data);
     
-    // Update the transcription state with the received text
-    setTranscription(data['text']);
+//     // Update the transcription state with the received text
+//     setTranscription(data['text']);
 
-  } catch (error) {
-    console.error('Error sending audio to server:', error);
-    alert('Failed to send audio to server. Please try again.');
-  } finally {
-    // Always set loading to false once the request completes, regardless of success or failure
-    setIsLoading(false);
-  }
-};
+//   } catch (error) {
+//     console.error('Error sending audio to server:', error);
+//     alert('Failed to send audio to server. Please try again.');
+//   } finally {
+//     // Always set loading to false once the request completes, regardless of success or failure
+//     setIsLoading(false);
+//   }
+// };
 
 
   return (
