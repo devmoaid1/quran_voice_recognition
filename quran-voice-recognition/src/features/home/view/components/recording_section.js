@@ -1,185 +1,195 @@
 import React, { useState, useRef, useEffect } from 'react';
 import io from 'socket.io-client';
 import DotLoader from '../../../../components/dot_loader';
+import Recorder from 'opus-recorder';
 
-// Connect to your Socket.IO server
-const socket = io('http://127.0.0.1:5000')
+// Initialize Socket.IO connection
+const socket = io('http://127.0.0.1:5000');
 
 const RecordingSection = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [transcription, setTranscription] = useState('Transcription will appear here...');
   const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
-
+  const recorderRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const chunkIntervalRef = useRef(null);
+  const mediaStreamRef=useRef(null);
   useEffect(() => {
+    // Handle connect event
+    socket.on('connect', () => {
+      console.log('Socket connected:', socket.id);
+    });
+    socket.on('connect_message', (data) => {
+      console.log("connected to socket from event:" + data.message);
+    });
+
+    // Handle disconnect event
+    socket.on('disconnect', () => {
+      console.log('Socket disconnected');
+    });
+
     // Listen for live transcription updates from the server
     socket.on('live_transcription', (data) => {
-      // Append the new text to your current transcription
-      setTranscription((prev) => prev + ' ' + (data.text || ''));
+      
+
+        setTranscription(data.text);
+      
     });
 
     return () => {
+      socket.off('connect');
+      socket.off('disconnect');
       socket.off('live_transcription');
     };
   }, []);
-
   const startRecording = async () => {
     setIsLoading(true);
     try {
+      // Request microphone access
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Create MediaRecorder; default MIME type (e.g., audio/webm) is acceptable here.
-      mediaRecorderRef.current = new MediaRecorder(stream);
-      // Start recording and emit data every 2 seconds (2000 milliseconds)
-      mediaRecorderRef.current.start(2000);
-      setIsRecording(true);
+      console.log("Audio stream acquired", stream);
 
-      mediaRecorderRef.current.ondataavailable = async (event) => {
-        if (event.data && event.data.size > 0) {
-          // Convert the blob to an ArrayBuffer before sending
-          const arrayBuffer = await event.data.arrayBuffer();
-          // Emit the audio chunk to the server
-          socket.emit('live_audio', { audio: arrayBuffer });
+      // Create an AudioContext and a MediaStreamAudioSourceNode from the stream
+      const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
+      const source = audioContext.createMediaStreamSource(stream);
+      console.log("Created AudioContext and source node", source);
+
+      // Set up Opus-Recorder options
+      const options = {
+        encoderPath: '/encoderWorker.min.js', // Make sure this file is in your public folder
+        numberOfChannels: 1,
+        encoderSampleRate: 48000,
+      };
+
+      // Create the Recorder instance by passing the options and the source node directly.
+      const recorder = new Recorder(options, source);
+      recorderRef.current = recorder;
+
+      // Set up the ondataavailable callback to process finalized chunks
+      recorder.ondataavailable = (typedArray) => {
+        console.log("ondataavailable triggered, typedArray length:", typedArray?.length);
+        if (typedArray && typedArray.length > 0) {
+          const blob = new Blob([typedArray], { type: 'audio/ogg' });
+          console.log("Got blob, size:", blob.size);
+          if (blob.size > 0) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+              console.log("Sending 5-second chunk to server...");
+             
+                socket.emit('live_audio', { audio: e.target.result });
+
+              
+            };
+            reader.readAsArrayBuffer(blob);
+          }
         }
       };
+
+      recorder.onerror = (err) => {
+        console.error("Recorder error:", err);
+      };
+
+      // Start the recorder
+      await recorder.start();
+      console.log("Recorder started.");
+
+      // Set an interval to stop and restart the recorder every 5 seconds
+      chunkIntervalRef.current = setInterval(async () => {
+        await recorder.stop(); // Finalizes current chunk and fires ondataavailable
+        await recorder.start(); // Restart for the next chunk
+        console.log("Recorder restarted for next chunk.");
+      }, 5000);
+
+      setIsRecording(true);
+      setIsLoading(false);
     } catch (error) {
       console.error('Error starting recording:', error);
       setIsLoading(false);
     }
   };
+  const stopRecording = async () => {
+    console.log("Stop recording function called.");
+    setIsRecording(false);
+    setTranscription("");
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
+    if (chunkIntervalRef.current) {
+      clearInterval(chunkIntervalRef.current);
+      chunkIntervalRef.current = null;
     }
-    setIsLoading(false);
+    if (recorderRef.current) {
+      console.log("Stopping recorder...");
+      await recorderRef.current.stop();
+      recorderRef.current = null;
+      console.log("Recorder stopped.");
+    }
+    if (audioContextRef.current) {
+      await audioContextRef.current.close();
+      audioContextRef.current = null;
+      console.log("AudioContext closed.");
+    }
+    // Stop the media stream tracks to release the microphone
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => {
+        track.stop();
+      });
+      mediaStreamRef.current = null;
+      console.log("Media stream tracks stopped.");
+    }
   };
 
-  // Function to start recording
-  // const startRecording = async () => {
-  //   setIsLoading(true)
-  //   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  //   mediaRecorderRef.current = new MediaRecorder(stream);
-    
-  //   mediaRecorderRef.current.start();
-  //   setIsRecording(true);
-    
-  //   mediaRecorderRef.current.ondataavailable = (event) => {
-  //     audioChunksRef.current.push(event.data);
-  //   };
-
-  //   // Move the `sendAudioToServer` call to the stop function
-  //   mediaRecorderRef.current.onstop = async () => {
-  //     // Send the audio to the server when recording stops
-  //     await sendAudioToServer();
-  //   };
-  // };
-
-  // // Function to stop recording
-  // const stopRecording = () => {
-  //   mediaRecorderRef.current.stop();
-  //   setIsRecording(false);
-    
-  // };
-
-  // Function to send audio to the server
- // Function to send audio to the server
-// const sendAudioToServer = async () => {
-//   console.log("Sending audio to server...");
-
-//   // Create a Blob from the audio chunks
-//   const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-//   audioChunksRef.current = []; // Clear the chunks after sending
-
-//   const formData = new FormData();
-//   formData.append('audio', audioBlob, 'audio.wav');
-
-//   try {
-//     // Make the POST request to the server
-//     const response = await fetch('http://127.0.0.1:5000/transcribe', {
-//       method: 'POST',
-//       body: formData,
-//     });
-
-//     // Check if the response is okay (status code 200-299)
-//     if (!response.ok) {
-//       const errorText = await response.text(); // Get the error text from the response
-//       throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
-//     }
-
-//     // Parse the response as JSON
-//     const data = await response.json();
-//     console.log(data);
-    
-//     // Update the transcription state with the received text
-//     setTranscription(data['text']);
-
-//   } catch (error) {
-//     console.error('Error sending audio to server:', error);
-//     alert('Failed to send audio to server. Please try again.');
-//   } finally {
-//     // Always set loading to false once the request completes, regardless of success or failure
-//     setIsLoading(false);
-//   }
-// };
-
+ 
 
   return (
     <section className="flex flex-col items-center gap-20 py-20 mb-24">
-    <h2 className="text-2xl font-bold">Start Reciting!</h2>
-    <div className="relative" id="audio-form">
-      <div className="relative p-2 pr-16 border rounded-full box-border border-black text-right text-2xl w-[38rem] h-[3rem] flex items-center justify-between">
-        {isLoading ? (
-          // Show the DotLoader when recording is active, centered inside the input container
-          <div className="flex items-center justify-center w-full">
-            <DotLoader />
-          </div>
-        ) : (
-          // Show the input field text when not recording
-          <input
-            className="w-full h-full border-none outline-none text-right bg-transparent py-40"
-            type="text"
-            value={transcription}
-            readOnly
-          />
-        )}
-  
-        {/* The record button positioned absolutely relative to the input or loader */}
-        <button
-          id="record-button"
-          type="button"
-          onClick={isRecording ? stopRecording : startRecording}
-          className="btn absolute right-0 top-0 h-full aspect-square scale-[102%] rounded-full" // Added rounded-full class
-        >
-          {isRecording ? (
-            <svg
-              id="stop-icon"
-              className="translate-x-[0.08rem] w-8 h-8"
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 256 256"
-            >
-              <path fill="currentColor" d="M64 64h128v128H64z" />
-            </svg>
+      <h2 className="text-2xl font-bold">Start Reciting!</h2>
+      <div className="relative" id="audio-form">
+        <div className="relative p-2 pr-16 border rounded-full box-border border-black text-right text-2xl w-[38rem] h-[3rem] flex items-center justify-between">
+          {isLoading ? (
+            <div className="flex items-center justify-center w-full">
+              <DotLoader />
+            </div>
           ) : (
-            <svg
-              id="recording-icon"
-              className="translate-x-[0.08rem] w-8 h-8"
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 256 256"
-            >
-              <path
-                fill="currentColor"
-                d="M80 128V64a48 48 0 0 1 96 0v64a48 48 0 0 1-96 0m128 0a8 8 0 0 0-16 0a64 64 0 0 1-128 0a8 8 0 0 0-16 0a80.11 80.11 0 0 0 72 79.6V240a8 8 0 0 0 16 0v-32.4a80.11 80.11 0 0 0 72-79.6"
-              />
-            </svg>
+            <input
+              className="w-full h-full border-none outline-none text-right bg-transparent py-40"
+              type="text"
+              value={transcription}
+              readOnly
+            />
           )}
-        </button>
+          <button
+            id="record-button"
+            type="button"
+            onClick={isRecording ? stopRecording : startRecording}
+            className="btn absolute right-0 top-0 h-full aspect-square scale-[102%] rounded-full"
+          >
+            {isRecording ? (
+              <svg
+                id="stop-icon"
+                className="translate-x-[0.08rem] w-8 h-8"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 256 256"
+              >
+                <path fill="currentColor" d="M64 64h128v128H64z" />
+              </svg>
+            ) : (
+              <svg
+                id="recording-icon"
+                className="translate-x-[0.08rem] w-8 h-8"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 256 256"
+              >
+                <path
+                  fill="currentColor"
+                  d="M80 128V64a48 48 0 0 1 96 0v64a48 48 0 0 1-96 0m128 0a8 8 0 0 0-16 0a64 64 0 0 1-128 0a8 8 0 0 0-16 0a80.11 80.11 0 0 0 72 79.6V240a8 8 0 0 0 16 0v-32.4a80.11 80.11 0 0 0 72-79.6"
+                />
+              </svg>
+            )}
+          </button>
+        </div>
       </div>
-    </div>
-  </section>
-  
-
+    </section>
   );
 };
 
