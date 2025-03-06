@@ -64,6 +64,15 @@ def map_transcription_words(transcription, words):
     mapped_transcription = [find_closest_word(word, words) for word in transcription_words]
     return ' '.join(mapped_transcription)
 
+@socketio.on('connect')
+def handle_connect():
+    print("Client connected")
+    # Emit a connection message to the client
+    emit('connect_message', {'message': 'Connected successfully to server!'})
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    print("Client disconnected")
 
 @socketio.on('live_audio')
 def handle_live_audio(data):
@@ -74,10 +83,21 @@ def handle_live_audio(data):
 
     # Convert the incoming audio data (assumed to be binary) into a BytesIO object.
     audio_chunk = data['audio']
+    if not audio_chunk:
+        emit('live_transcription', {'error': 'Empty audio chunk received'})
+        return
     audio_file = BytesIO(audio_chunk)
     
+    try:
+        # Update the format if you change the MIME type on the client
+        audio_segment = AudioSegment.from_file(audio_file, format="ogg")
+    except Exception as e:
+        print(f"Error decoding audio chunk: {e}")
+        emit('live_transcription', {'error': f'Audio decoding error: {e}'})
+        return
+    
     # Convert to WAV in-memory using pydub.
-    audio_segment = AudioSegment.from_file(audio_file)
+    # audio_segment = AudioSegment.from_file(audio_file, format="ogg")
     wav_buffer = BytesIO()
     audio_segment.export(wav_buffer, format="wav")
     wav_buffer.seek(0)
@@ -123,11 +143,11 @@ def handle_live_audio(data):
     transcription = processor.tokenizer.decode(predicted_ids[0], skip_special_tokens=True)
     print(f'Live transcription: {transcription}')
     
-    # Optionally, if you want to perform word mapping as in your /transcribe endpoint:
-    word_file_path = 'words_ama.txt'
-    words = load_words(word_file_path)
-    final_transcription = map_transcription_words(transcription, words)
-    print(f"Final live transcription: {final_transcription}")
+    # # Optionally, if you want to perform word mapping as in your /transcribe endpoint:
+    # word_file_path = 'words_ama.txt'
+    # words = load_words(word_file_path)
+    # final_transcription = map_transcription_words(transcription, words)
+    # print(f"Final live transcription: {final_transcription}")
     
     # Emit the transcription back to the client.
     emit('live_transcription', {'text': transcription})
