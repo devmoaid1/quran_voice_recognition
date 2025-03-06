@@ -14,60 +14,65 @@ const RecordingSection = () => {
   const recorderRef = useRef(null);
   const audioContextRef = useRef(null);
   const chunkIntervalRef = useRef(null);
-  const mediaStreamRef=useRef(null);
+  const mediaStreamRef = useRef(null);
+
   useEffect(() => {
-    // Handle connect event
+    // Always subscribe to connect/disconnect events.
     socket.on('connect', () => {
       console.log('Socket connected:', socket.id);
     });
     socket.on('connect_message', (data) => {
       console.log("connected to socket from event:" + data.message);
     });
-
-    // Handle disconnect event
     socket.on('disconnect', () => {
       console.log('Socket disconnected');
     });
-
-    // Listen for live transcription updates from the server
-    socket.on('live_transcription', (data) => {
-      
-
-        setTranscription(data.text);
-      
-    });
-
     return () => {
       socket.off('connect');
+      socket.off('connect_message');
       socket.off('disconnect');
-      socket.off('live_transcription');
     };
   }, []);
+
+  // Subscribe to live transcription events only when recording.
+  useEffect(() => {
+    if (isRecording) {
+      const handleLiveTranscription = (data) => {
+        setTranscription(data.text);
+      };
+      socket.on('live_transcription', handleLiveTranscription);
+      return () => {
+        socket.off('live_transcription', handleLiveTranscription);
+      };
+    }
+  }, [isRecording]);
+
   const startRecording = async () => {
     setIsLoading(true);
     try {
-      // Request microphone access
+      // Request microphone access.
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
       console.log("Audio stream acquired", stream);
 
-      // Create an AudioContext and a MediaStreamAudioSourceNode from the stream
+      // Create AudioContext and source node.
       const audioContext = new AudioContext();
       audioContextRef.current = audioContext;
       const source = audioContext.createMediaStreamSource(stream);
       console.log("Created AudioContext and source node", source);
 
-      // Set up Opus-Recorder options
+      // Configure Opus-Recorder options.
       const options = {
-        encoderPath: '/encoderWorker.min.js', // Make sure this file is in your public folder
+        encoderPath: '/encoderWorker.min.js', // Must be in your public folder.
         numberOfChannels: 1,
         encoderSampleRate: 48000,
       };
 
-      // Create the Recorder instance by passing the options and the source node directly.
+      // Create the Recorder instance using the source node.
       const recorder = new Recorder(options, source);
       recorderRef.current = recorder;
 
-      // Set up the ondataavailable callback to process finalized chunks
+      // Set the ondataavailable callback.
       recorder.ondataavailable = (typedArray) => {
         console.log("ondataavailable triggered, typedArray length:", typedArray?.length);
         if (typedArray && typedArray.length > 0) {
@@ -77,10 +82,7 @@ const RecordingSection = () => {
             const reader = new FileReader();
             reader.onload = function(e) {
               console.log("Sending 5-second chunk to server...");
-             
-                socket.emit('live_audio', { audio: e.target.result });
-
-              
+              socket.emit('live_audio', { audio: e.target.result });
             };
             reader.readAsArrayBuffer(blob);
           }
@@ -91,14 +93,14 @@ const RecordingSection = () => {
         console.error("Recorder error:", err);
       };
 
-      // Start the recorder
+      // Start the recorder.
       await recorder.start();
       console.log("Recorder started.");
 
-      // Set an interval to stop and restart the recorder every 5 seconds
+      // Set an interval to stop and restart the recorder every 5 seconds.
       chunkIntervalRef.current = setInterval(async () => {
-        await recorder.stop(); // Finalizes current chunk and fires ondataavailable
-        await recorder.start(); // Restart for the next chunk
+        await recorder.stop(); // Finalize the current chunk.
+        await recorder.start(); // Restart for the next chunk.
         console.log("Recorder restarted for next chunk.");
       }, 5000);
 
@@ -109,10 +111,11 @@ const RecordingSection = () => {
       setIsLoading(false);
     }
   };
+
   const stopRecording = async () => {
     console.log("Stop recording function called.");
     setIsRecording(false);
-    setTranscription("");
+    setTranscription("Transcription will appear here...");
 
     if (chunkIntervalRef.current) {
       clearInterval(chunkIntervalRef.current);
@@ -129,7 +132,7 @@ const RecordingSection = () => {
       audioContextRef.current = null;
       console.log("AudioContext closed.");
     }
-    // Stop the media stream tracks to release the microphone
+    // Stop the media stream tracks to release the microphone.
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => {
         track.stop();
@@ -138,8 +141,6 @@ const RecordingSection = () => {
       console.log("Media stream tracks stopped.");
     }
   };
-
- 
 
   return (
     <section className="flex flex-col items-center gap-20 py-20 mb-24">
