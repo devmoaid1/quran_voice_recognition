@@ -2,8 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import DotLoader from '../../../../components/dot_loader';
 import io from 'socket.io-client';
 
-// Initialize socket with additional options for better debugging
-const socket = io('https://dfba-34-16-173-222.ngrok-free.app/', {
+// Replace with your ngrok URL
+const socket = io('https://22aa-34-126-168-200.ngrok-free.app/', {
   reconnection: true,
   reconnectionAttempts: 5,
   reconnectionDelay: 1000,
@@ -13,128 +13,83 @@ const RecordingSection = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [transcription, setTranscription] = useState('Transcription will appear here...');
+  const [error, setError] = useState(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksQueue = useRef([]);
+  const streamRef = useRef(null);
   const [processing, setProcessing] = useState(false);
 
-  // Socket event listeners
   useEffect(() => {
-    console.log('useEffect mounting');
-
-    socket.on('connect', () => {
-      console.log('Connected to backend successfully');
-    });
-
-    socket.on('connect_error', (error) => {
-      console.error('Connection failed:', error.message);
-      console.error('Full error details:', JSON.stringify(error, null, 2));
-    });
-
-    socket.on('disconnect', (reason) => {
-      console.log('Disconnected from backend. Reason:', reason);
-    });
-
+    socket.on('connect', () => console.log('[Frontend] Connected to server'));
+    
     socket.on('transcription_result', (data) => {
-      console.log('Transcription received:', data.text);
-      setTranscription((prev) => `${prev} ${data.text}`);
+      console.log('[Frontend] Received Transcription:', data.text);
+      setTranscription((prev) => `${prev === 'Transcription will appear here...' ? '' : prev} ${data.text}`);
       setIsLoading(false);
       setProcessing(false);
-      processAudioQueue();
     });
 
     socket.on('transcription_error', (data) => {
-      console.error('Transcription error:', data);
+      console.error('[Frontend] Server error:', data.error);
+      setError('Transcription failed. Please try again.');
       setIsLoading(false);
       setProcessing(false);
-      processAudioQueue();
     });
 
-    // Cleanup
     return () => {
-      console.log('useEffect cleaning up');
       socket.off('connect');
-      socket.off('connect_error');
-      socket.off('disconnect');
       socket.off('transcription_result');
       socket.off('transcription_error');
     };
   }, []);
 
-  // Log socket status
-  useEffect(() => {
-    console.log('Socket connected status:', socket.connected);
-  }, []);
-
-  // Function to process audio queue
-  const processAudioQueue = () => {
-    if (audioChunksQueue.current.length > 0 && !processing) {
-      setProcessing(true);
-      const audioBlob = audioChunksQueue.current.shift();
-      const reader = new FileReader();
-
-      reader.onloadend = () => {
-        const arrayBuffer = reader.result;
-        console.log('Received ArrayBuffer:', {
-          byteLength: arrayBuffer.byteLength,
-          type: arrayBuffer.constructor.name,
-        });
-        socket.emit('audio_chunk', arrayBuffer);
-      };
-
-      reader.readAsArrayBuffer(audioBlob);
-    }
-  };
-
-  // Function to start recording
   const startRecording = async () => {
-    setIsLoading(true);
-    setTranscription('');
     try {
+      setError(null);
+      setIsLoading(true);
+      setTranscription('');
+      console.log('[Frontend] Requesting microphone access...');
+      
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      console.log('Media stream settings:', stream.getAudioTracks()[0].getSettings());
+      streamRef.current = stream;
+      mediaRecorderRef.current = new MediaRecorder(stream, { mimeType: 'audio/wav' });
 
-      let mimeType;
-      const supportedTypes = [
-        'audio/webm; codecs=opus',
-        'audio/ogg; codecs=opus',
-        'audio/webm',
-        'audio/ogg',
-      ];
-      for (const type of supportedTypes) {
-        if (MediaRecorder.isTypeSupported(type)) {
-          mimeType = type;
-          break;
-        }
-      }
-      if (!mimeType) {
-        console.error('No supported MIME type found for MediaRecorder');
-        setIsLoading(false);
-        return;
-      }
-      console.log('Using MIME type:', mimeType);
-
-      mediaRecorderRef.current = new MediaRecorder(stream, { mimeType });
-      mediaRecorderRef.current.start(1000); // Split into 1-second chunks
+      mediaRecorderRef.current.start(1000);
       setIsRecording(true);
+      console.log('[Frontend] Recording started...');
 
       mediaRecorderRef.current.ondataavailable = (event) => {
-        console.log('Chunk size:', event.data.size, 'MIME type:', mediaRecorderRef.current.mimeType);
-        audioChunksQueue.current.push(event.data);
-        if (!processing) {
-          processAudioQueue();
+        if (event.data.size > 0) {
+          console.log('[Frontend] Captured audio chunk...');
+          audioChunksQueue.current.push(event.data);
+          if (!processing) processAudioQueue();
         }
       };
 
       mediaRecorderRef.current.onstop = () => {
-        stream.getTracks().forEach((track) => track.stop()); // Clean up audio stream
+        console.log('[Frontend] Recording stopped.');
+        stream.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+        socket.emit('stop_recording');
       };
-    } catch (error) {
-      console.error('Error starting recording:', error);
+
+    } catch (err) {
+      console.error('[Frontend] Recording failed:', err);
+      setError('Failed to access microphone. Please check permissions.');
       setIsLoading(false);
     }
   };
 
-  // Function to stop recording
+  const processAudioQueue = () => {
+    if (audioChunksQueue.current.length > 0 && !processing) {
+      setProcessing(true);
+      const audioBlob = audioChunksQueue.current.shift();
+      console.log('[Frontend] Sending audio chunk to backend...');
+      
+      socket.emit('audio_chunk', { audio: audioBlob, format: 'wav' });
+    }
+  };
+
   const stopRecording = () => {
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
@@ -156,38 +111,17 @@ const RecordingSection = () => {
             <input
               className="w-full h-full border-none outline-none text-right bg-transparent py-40"
               type="text"
-              value={transcription}
+              value={error || transcription}
               readOnly
             />
           )}
           <button
-            id="record-button"
             type="button"
             onClick={isRecording ? stopRecording : startRecording}
             className="btn absolute right-0 top-0 h-full aspect-square scale-[102%] rounded-full"
+            disabled={!!error}
           >
-            {isRecording ? (
-              <svg
-                id="stop-icon"
-                className="translate-x-[0.08rem] w-8 h-8"
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 256 256"
-              >
-                <path fill="currentColor" d="M64 64h128v128H64z" />
-              </svg>
-            ) : (
-              <svg
-                id="recording-icon"
-                className="translate-x-[0.08rem] w-8 h-8"
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 256 256"
-              >
-                <path
-                  fill="currentColor"
-                  d="M80 128V64a48 48 0 0 1 96 0v64a48 48 0 0 1-96 0m128 0a8 8 0 0 0-16 0a64 64 0 0 1-128 0a8 8 0 0 0-16 0a80.11 80.11 0 0 0 72 79.6V240a8 8 0 0 0 16 0v-32.4a80.11 80.11 0 0 0 72-79.6"
-                />
-              </svg>
-            )}
+            {isRecording ? 'Stop' : 'Record'}
           </button>
         </div>
       </div>
