@@ -2,14 +2,19 @@ import React, { useState, useRef, useEffect } from 'react';
 import io from 'socket.io-client';
 import DotLoader from '../../../../components/dot_loader';
 import Recorder from 'opus-recorder';
+import { surahDict } from '../../../../core/constants/constants'; // Import Surah List
 
 // Initialize Socket.IO connection
-const socket = io('http://127.0.0.1:5000');
+const socket = io('https://calm-goats-tease.loca.lt/', {
+  transports: ["websocket"], // Force WebSocket-only transport
+});
 
 const RecordingSection = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [transcription, setTranscription] = useState('Transcription will appear here...');
+  const [selectedSurah, setSelectedSurah] = useState(''); // Track the selected Surah
+  const [mismatches, setMismatches] = useState('');
   const mediaRecorderRef = useRef(null);
   const recorderRef = useRef(null);
   const audioContextRef = useRef(null);
@@ -38,16 +43,36 @@ const RecordingSection = () => {
   useEffect(() => {
     if (isRecording) {
       const handleLiveTranscription = (data) => {
-        setTranscription(data.text);
+        console.log("📢 Received transcription:", data)
+        setTranscription(data.text || 'No transcription received.');
+        
+        setMismatches(
+          data.mismatched_words?.length > 0
+            ? data.mismatched_words.map(([wrong, correct]) => `${wrong} → ${correct}`).join(', ')
+            : 'No mismatches detected'
+        );
       };
+      
       socket.on('live_transcription', handleLiveTranscription);
       return () => {
         socket.off('live_transcription', handleLiveTranscription);
       };
     }
   }, [isRecording]);
+  
+
+  // Handle Surah selection
+  const handleSurahChange = (event) => {
+    setSelectedSurah(event.target.value);
+    console.log(`📖 Selected Surah: ${event.target.value}`);
+  };
 
   const startRecording = async () => {
+    if (!selectedSurah) {
+      alert('Please select a Surah before recording.');
+      return;
+    }
+
     setIsLoading(true);
     try {
       // Request microphone access.
@@ -82,7 +107,10 @@ const RecordingSection = () => {
             const reader = new FileReader();
             reader.onload = function(e) {
               console.log("Sending 5-second chunk to server...");
-              socket.emit('live_audio', { audio: e.target.result });
+              socket.emit('live_audio', { 
+                audio: e.target.result,
+              surah: selectedSurah
+              });
             };
             reader.readAsArrayBuffer(blob);
           }
@@ -143,10 +171,34 @@ const RecordingSection = () => {
   };
 
   return (
-    <section className="flex flex-col items-center gap-20 py-20 mb-24">
+    <section className="flex flex-col items-center gap-10 py-10 mb-24">
       <h2 className="text-2xl font-bold">Start Reciting!</h2>
-      <div className="relative" id="audio-form">
-        <div className="relative p-2 pr-16 border rounded-full box-border border-black text-right text-2xl w-[38rem] h-[3rem] flex items-center justify-between">
+
+      {/* Dropdown List */}
+      <div className="w-full max-w-md text-center">
+        <label htmlFor="surah-dropdown" className="block text-lg font-semibold mb-2">
+          Select a Surah:
+        </label>
+        <select
+          id="surah-dropdown"
+          className="w-full p-2 border rounded"
+          value={selectedSurah}
+          onChange={handleSurahChange}
+        >
+          <option value="" disabled>
+            -- Choose a Surah --
+          </option>
+          {Object.keys(surahDict).map((key) => (
+            <option key={key} value={surahDict[key]}>
+              {surahDict[key]}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Recording Section */}
+      <div className="relative w-full max-w-md" id="audio-form">
+        <div className="relative p-2 pr-16 border rounded-full box-border border-black text-right text-2xl h-[3rem] flex items-center justify-between">
           {isLoading ? (
             <div className="flex items-center justify-center w-full">
               <DotLoader />
