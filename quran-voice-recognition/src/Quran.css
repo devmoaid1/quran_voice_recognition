@@ -1,0 +1,152 @@
+.quran-text-container {
+    text-align: center;
+    padding: 10px;
+    font-family: "Amiri", serif;
+    direction: rtl;
+}
+  
+.surah-title {
+    font-size: 28px;
+    font-weight: bold;
+    margin-bottom: 20px;
+}
+  
+.ayahs {
+    font-size: 10px;
+    line-height: 2;
+    text-align: justify;
+    padding: 10px;
+}
+  
+.ayah-number {
+    font-size: 10px;
+    color: #b89470; /* Gold color */
+    font-weight: bold;
+    margin-right: 2px;
+}
+  
+/* Recording Section */
+.recording-container {
+    text-align: center;
+    margin-top: 20px;
+}
+  
+.record-button {
+    background-color: #007bff;
+    color: white;
+    font-size: 18px;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+}
+  
+.record-button:hover {
+    background-color: #0056b3;
+ }
+  
+.transcription-text {
+    font-size: 16px;
+    margin-top: 10px;
+    color: #333;
+}
+  
+/* Quran.css */
+
+.surah-name {
+  font-family: 'Amiri', 'Scheherazade', 'Noto Naskh Arabic', serif;
+  font-size: 1.9rem;
+  font-weight: bold;
+  color: #030303;
+  text-align: center;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  background: linear-gradient(to right, #D4AF37, #FBE8A6);
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  display: inline-block;
+}
+
+.quran-word {
+  font-family: 'Amiri', 'Scheherazade', 'Noto Naskh Arabic', serif;
+  font-size: 1.5rem;
+  line-height: 2.5rem;
+  transition: background-color 0.3s ease, color 0.3s ease;
+  display: inline-block;
+  padding: 0 0.2rem;
+  word-break: keep-all;
+}
+
+.ayah-marker {
+  color: #D69E2E;
+  font-size: 1rem;
+  vertical-align: middle;
+}
+
+ /* .quran-page-content {
+  text-align: justify;
+  font-family: 'KFGQPC Uthmanic Script HAFS';
+  font-size: 1.7rem;
+  line-height: 1.5rem;
+  
+  height: auto;
+  overflow-y: visible;
+  padding: 1rem;
+  background-color: #fff;
+  border: 2px solid #e2e8f0;
+  border-radius: 0.75rem;
+}  */
+
+.quran-structured-page {
+  text-align: justify;
+  direction: rtl;
+  font-family: 'KFGQPC Uthmanic Script HAFS';
+  font-size: 1.8rem;
+  line-height: 0rem;
+  padding: 0rem;
+  background-color: #FAF8F0;
+  border: 2px solid #e2e8f0;
+  border-radius: 0.75rem;
+}
+
+.line {
+  text-align: center;
+  line-height: 0rem;
+  margin-bottom: 0rem;
+}
+
+.line-text {
+  display: block;
+  width: 100%;
+}
+
+.quran-fixed-page {
+  width: 650px; /* or the exact width you need */
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+@media (max-width: 640px) {
+  .quran-page-content {
+    height: 450px; /* slightly shorter for mobile */
+    font-size: 1.5rem;
+  }
+}
+
+:root {
+  --primary-gold: #D4AF37;
+  --background-offwhite: #FAF8F0;
+  --text-dark: #333333;
+}
+
+body {
+  background-color: var(--background-offwhite);
+  color: var(--text-dark);
+  font-family: 'Cairo', sans-serif;
+}
+
+/* button {
+  background-color: var(--primary-gold);
+  color: var(--primary-gold);
+  border: none;
+} */

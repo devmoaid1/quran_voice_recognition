@@ -20,3 +20,101 @@ code {
 .btn {
   @apply font-semibold rounded-full text-white bg-primary hover:bg-primary-hover transition py-2 px-3 shadow-sm;
 }
+
+.quran-page-container {
+  text-align: center;
+  background: #f8f8f8;
+  color: #333;
+  padding: 10px;
+  border-radius: 10px;
+  max-width: 650px;
+  margin: auto;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: bold;
+  margin-bottom: 15px;
+  color: #222;
+}
+
+.quran-page-image {
+  width: 100%;
+  max-width: 700px;
+  box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+.navigation {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.button {
+  background-color: #ece6cb;
+  color: #D4AF37;
+  padding: 10px 15px;
+  border: none;
+  cursor: pointer;
+  border-radius: 5px;
+  font-size: 18px;
+}
+
+button:disabled {
+  background-color: #ccc;
+}
+
+.page-input {
+  width: 60px;
+  text-align: center;
+  font-size: 18px;
+  padding: 5px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+}
+
+.footer-custom {
+  background-color: #355E61; /* Dark gray/black */
+}
+
+/* Recording Waveform animation */
+@keyframes wave {
+  0%, 100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(2.5);
+  }
+}
+
+.animate-wave {
+  animation: wave 1s ease-in-out infinite;
+  display: inline-block;
+  border-radius: 9999px;
+}
+
+/* Custom text color to gold*/
+.text-color-custom{
+  color: #D4AF37;
+}
+
+/* Text animation on info section */
+@keyframes fadeInSlide {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeInSlide {
+  animation: fadeInSlide 1s ease-in-out;
+}
+
+.social-media-dark{
+  background-color: #1a193a;
+}
