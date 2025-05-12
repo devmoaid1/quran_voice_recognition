@@ -18,12 +18,15 @@
 .env.test.local
 .env.production.local
 
+.codegpt
+.vscode
+
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 surahs_versus
 surahs_words
-.codegpt
+
 quran_pages
 quran_pages_json
 suras.json
