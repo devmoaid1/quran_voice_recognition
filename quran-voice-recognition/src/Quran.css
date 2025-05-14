@@ -68,11 +68,11 @@
 }
 
 .quran-word {
-  font-family: 'Amiri', 'Scheherazade', 'Noto Naskh Arabic', serif;
+  font-family: 'HafsSmart', 'Amiri', 'Scheherazade', 'Noto Naskh Arabic', serif;
   font-size: 1.5rem;
   line-height: 2.5rem;
   transition: background-color 0.3s ease, color 0.3s ease;
-  display: inline-block;
+  display: inline;
   padding: 0 0.2rem;
   word-break: keep-all;
 }
@@ -97,10 +97,15 @@
   border-radius: 0.75rem;
 }  */
 
+@font-face {
+  font-family: 'HafsSmart';
+  src: url('/public/assets/fonts/HafsSmart_08.ttf') format('truetype');
+}
+
 .quran-structured-page {
   text-align: justify;
   direction: rtl;
-  font-family: 'KFGQPC Uthmanic Script HAFS';
+  font-family: 'HafsSmart', 'KFGQPC Uthmanic Script HAFS';
   font-size: 1.8rem;
   line-height: 0rem;
   padding: 0rem;

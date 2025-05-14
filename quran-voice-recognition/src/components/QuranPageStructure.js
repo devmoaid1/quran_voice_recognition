@@ -163,11 +163,12 @@ const QuranPageStructure = ({
                 {wordSpan}
                 {isAyahEnd && (
                   <span className="ayah-marker px-2 text-yellow-600 dark:text-yellow-400 text-3xl">
-                    ۝
+                    {/* ۝ */}
                   </span>
                 )}
               </React.Fragment>
             );
+            
           });
         }
 
