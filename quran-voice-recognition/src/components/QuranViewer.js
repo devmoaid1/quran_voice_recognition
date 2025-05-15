@@ -3,7 +3,9 @@ import PropTypes from "prop-types";
 
 const QuranPageViewer = ({ selectedPage, setSelectedPage, highlightedAyah }) => {
   const totalPages = 604;
+  const totalJuz = 30; // Total number of Juz in the Quran
   const [pageAyahs, setPageAyahs] = useState([]);
+  const [selectedJuz, setSelectedJuz] = useState(1); // State for selected Juz
 
   const getFormattedPageNumber = (page) => page.toString().padStart(3, '0');
 
@@ -40,9 +42,25 @@ const QuranPageViewer = ({ selectedPage, setSelectedPage, highlightedAyah }) => 
   const isAyahHighlighted = (ayah) =>
     highlightedAyah?.sura === ayah.sura && highlightedAyah?.ayah === ayah.ayah;
 
+  const handleJuzChange = (event) => {
+    const juz = parseInt(event.target.value);
+    setSelectedJuz(juz);
+    // Logic to update the page based on selected Juz can be added here
+  };
+
   return (
     <div className="quran-page-container">
       <h2 className="page-title">Page {selectedPage} / {totalPages}</h2>
+
+      {/* Juz Dropdown */}
+      <div className="juz-dropdown">
+        <label htmlFor="juz-select">Select Juz:</label>
+        <select id="juz-select" value={selectedJuz} onChange={handleJuzChange}>
+          {Array.from({ length: totalJuz }, (_, i) => (
+            <option key={i + 1} value={i + 1}>Juz {i + 1}</option>
+          ))}
+        </select>
+      </div>
 
       {/* Page Image */}
       <img
