@@ -38,7 +38,7 @@ function InfoSection() {
           The Prophet <span className="italic">(ﷺ)</span> said:
         </p>
 
-        <blockquote className="relative text-xl md:text-2xl font-semibold pl-6 transition-opacity duration-1000 ease-in-out">
+        <blockquote className="relative text-xl md:text-2xl font-semibold pl-6 transition-opacity duration-1000 ease-in-out min-h-[110px] md:min-h-[130px] lg:min-h-[160px] flex items-start">
           <span className="absolute left-0 -top-2 text-4xl text-color-custom">“</span>
           <span key={currentQuoteIndex} className="inline-block animate-fadeInSlide">
             {quotes[currentQuoteIndex]}
@@ -48,7 +48,7 @@ function InfoSection() {
 
         <a
           href="#"
-          className="mt-20 inline-block bg-primary hover:bg-primary-hover text-white font-medium py-3 px-6 rounded-lg shadow-md transition"
+          className="mt-10 inline-block bg-primary hover:bg-primary-hover text-white font-medium py-3 px-6 rounded-lg shadow-md transition"
         >
           Try it out!
         </a>
