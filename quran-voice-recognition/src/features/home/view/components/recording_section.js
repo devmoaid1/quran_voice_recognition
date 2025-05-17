@@ -4,6 +4,7 @@ import Recorder from 'opus-recorder';
 import DotLoader from '../../../../components/dot_loader';
 import QuranPageStructure from "../../../../components/QuranPageStructure";
 import { readers } from "../../../../core/constants/reader"; // Import readers for playing audio
+import { JuzData } from "../../../../core/constants/JuzData";
 import { surahDict } from '../../../../core/constants/constants'; // Import Surah List
 import { surahPages } from "../../../../core/constants/surah_pages"; // Import Surah Page Numbers
 import { getPageFromAyah } from '../../../../core/utils/quranUtils';
@@ -25,6 +26,7 @@ const RecordingSection = () => {
   const [mismatches, setMismatches] = useState('');
   const [selectedReader, setSelectedReader] = useState('');
   const [matchedWords, setMatchedWords] = useState([]); //To sync audio with word-by-word
+  const [selectedJuz, setSelectedJuz] = useState(null);
 
   const recorderRef = useRef(null);
   const audioContextRef = useRef(null);
@@ -108,8 +110,8 @@ const RecordingSection = () => {
     setSelectedSurah(surahValue);
   
     const surahNumber = parseInt(surahValue.replace("surah_", "")); // "112" → 112
-  
     const page = surahPages[surahNumber];
+    
     if (page) {
       setSelectedPage(page);
   
@@ -118,10 +120,36 @@ const RecordingSection = () => {
         setHighlightedAyah({ sura: surahNumber, ayah: 1 });
         console.log("✅ Highlighting Surah:", surahNumber, "Ayah 1");
       }, 50);
+      // 🔄 Sync Juz dropdown
+      const matchingJuz = JuzData.find((j, index) => {
+        const startPage = j.page;
+        const endPage = JuzData[index + 1] ? JuzData[index + 1].page : 605;
+        return page >= startPage && page < endPage;
+      });
+      if (matchingJuz) {
+        setSelectedJuz(matchingJuz.value);
+      }
     } else {
       console.warn("No page found for Surah:", surahNumber);
     }
   };
+
+  const handleJuzChange = (event) => {
+    const selected = parseInt(event.target.value);
+    setSelectedJuz(selected);
+
+    const juz = JuzData.find(j => j.value === selected);
+    if (!juz) return;
+
+    setSelectedSurah(`surah_${juz.start.sura}`);
+    setSelectedPage(juz.page);
+
+    setTimeout(() => {
+      setHighlightedAyah(juz.start);
+      console.log(`📖 Jumped to Juz ${selected}: Surah ${juz.start.sura}, Ayah ${juz.start.ayah}, Page ${juz.page}`);
+    }, 50);
+  };
+
   
 
   const startRecording = async () => {
@@ -254,10 +282,30 @@ const RecordingSection = () => {
           </div>
   
           {/* Juz & Hizb Placeholder */}
-          <div className="text-gray-600 text-right text-sm dark:text-gray-300 font-semibold">
-            {/* Juz 30 | Hizb 60 */}
-            Juz 30
+          <div className="w-1/3 max-w-xs">
+            <select
+              id="juz-dropdown"
+              className="w-full p-3 border rounded-lg bg-gray-50 shadow-md dark:bg-gray-800 dark:border-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 shadow-sm transition"
+              value={selectedJuz || ""}
+              onChange={handleJuzChange}
+            >
+              <option value="" disabled>
+                -- Choose a Juz --
+              </option>
+              {JuzData.map((juz) => (
+                <option key={juz.value} value={juz.value}>
+                  {juz.label}
+                </option>
+              ))}
+            </select>
+
+            {/* Safe Juz Info Below Dropdown */}
+            {(() => {
+              const selected = JuzData.find(j => j.value === selectedJuz);
+              if (!selected || !Array.isArray(selected.hizbs)) return null;
+            })()}
           </div>
+
         </div>
   
         {/* Quran Page Content */}
