@@ -1,7 +1,5 @@
 /* eslint-disable jsx-a11y/anchor-is-valid */
 import { useEffect, useState } from 'react';
-import frame from '../../../../assets/img/frame.svg';
-import hero from '../../../../assets/img/hero.svg';
 import slide1 from '../../../../assets/img/slide_1.png';
 
 function InfoSection() {
