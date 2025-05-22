@@ -15,6 +15,7 @@ const QuranPageStructure = ({
 }) => {
   const [page, setPage] = useState(null);
   const [selectedAyah, setSelectedAyah] = useState(null);
+  const [ayahMarkerMap, setAyahMarkerMap] = useState({});
   const lineRefs = useRef({});
 
   useEffect(() => {
@@ -29,6 +30,15 @@ const QuranPageStructure = ({
         });
     }
   }, [pageNumber]);
+
+  useEffect(() => {
+    fetch("/ayah_markers/all_ayah_markers.json")
+      .then((res) => res.json())
+      .then(setAyahMarkerMap)
+      .catch((err) => {
+        console.error("Failed to load ayah marker map:", err);
+      });
+  }, []);
 
   useEffect(() => {
     if (!highlightedAyah || !page || !page.ayahData) return;
@@ -47,6 +57,9 @@ const QuranPageStructure = ({
           match.ayah_begin >= line.first_word_id &&
           match.ayah_end <= line.last_word_id
       );
+
+      console.log(`🔍 Highlighted Ayah: Surah ${match.surahID}, Ayah ${match.ayahID}, Word Range: ${match.ayah_begin} → ${match.ayah_end}`);
+
       if (lineWithAyah && lineRefs.current[lineWithAyah.line_number]) {
         lineRefs.current[lineWithAyah.line_number].scrollIntoView({
           behavior: "smooth",
@@ -59,31 +72,42 @@ const QuranPageStructure = ({
   if (!page || !page.pageData || !page.wordData || !page.ayahData) {
     return <div>Loading Quran page...</div>;
   }
-  
+
+  const isSpecialLine = (line) => {
+    return line.line_type === "basmallah" || line.line_type === "surah_name";
+  };
 
   return (
-    <div className="quran-structured-page text-right p-4 border rounded bg-white dark:bg-gray-800 dark:border-gray-700 mt-0 text-2xl leading-loose transition-colors duration-300">
+    <div className="quran-structured-page">
       {page.pageData.map((line) => {
         let lineContent = null;
 
         if (line.line_type === "basmallah") {
           lineContent = (
-            <span className="text-2xl basmallah text-green-700 dark:text-white">
-              بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
+            <span className="basmallah text-green-700 dark:text-green-400">
+              بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
             </span>
           );
         } else if (line.line_type === "surah_name") {
           const surahName = Array.isArray(page.surah_number)
-            ? getSurahName(page.surah_number[
-                page.pageData
-                  .slice(0, line.line_number)
-                  .filter((l) => l.line_type === "surah_name").length - 1
-              ])
+            ? getSurahName(
+                page.surah_number[
+                  page.pageData
+                    .slice(0, line.line_number)
+                    .filter((l) => l.line_type === "surah_name").length - 1
+                ]
+              )
             : getSurahName(page.surah_number);
+          // lineContent = <span className="surah-name">{surahName}</span>;
           lineContent = (
-            <span className="surah-name text-2xl font-bold text-gray-800 dark:text-white">
-              {surahName}
-            </span>
+            <div className="surah-svg-wrapper">
+              <img
+                src="/assets/surah_border_sym4.svg"
+                alt="Surah border"
+                className="surah-svg-frame"
+              />
+              <span className="surah-svg-text">{surahName}</span>
+            </div>
           );
         } else if (line.text) {
           lineContent = line.text;
@@ -129,8 +153,10 @@ const QuranPageStructure = ({
             const wordSpan = (
               <span
                 key={id}
-                className={`quran-word px-2 cursor-pointer dark:text-white ${highlightClass} ${
-                  wrongWords.includes(id) ? "text-red-600 dark:text-red-400 font-bold" : ""
+                className={`quran-word ${highlightClass} ${
+                  wrongWords.includes(id)
+                    ? "text-red-600 dark:text-red-400 font-bold"
+                    : ""
                 }`}
                 onClick={() => {
                   const clickedAyah = page.ayahData.find(
@@ -150,25 +176,28 @@ const QuranPageStructure = ({
                   }
                 }}
               >
-                {wordText + " "}
+                {wordText}
               </span>
             );
 
-            const isAyahEnd = page.ayahData?.some(
+            const matchingAyah = page.ayahData.find(
               (entry) => entry.ayah_end === wordNum
             );
+            const markerSymbol = matchingAyah
+              ? ayahMarkerMap?.[matchingAyah.ayahID]
+              : null;
 
             return (
               <React.Fragment key={id}>
                 {wordSpan}
-                {isAyahEnd && (
-                  <span className="ayah-marker px-2 text-yellow-600 dark:text-yellow-400 text-3xl">
-                    {/* ۝ */}
+                {markerSymbol && (
+                  <span className="ayah-marker text-yellow-600 dark:text-yellow-400 text-1xl">
+                    {markerSymbol}
                   </span>
                 )}
+                {" "}
               </React.Fragment>
             );
-            
           });
         }
 
@@ -176,9 +205,7 @@ const QuranPageStructure = ({
           <div
             key={line.line_number}
             ref={(el) => (lineRefs.current[line.line_number] = el)}
-            className={`line mb-2 px-2 py-1 rounded ${
-              line.is_centered ? "text-center" : ""
-            }`}
+            className={`line ${isSpecialLine(line) ? "is-centered" : ""}`}
           >
             <div className="line-text">{lineContent}</div>
           </div>
@@ -186,7 +213,6 @@ const QuranPageStructure = ({
       })}
     </div>
   );
-
 };
 
 export default QuranPageStructure;

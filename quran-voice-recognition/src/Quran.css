@@ -53,37 +53,78 @@
   
 /* Quran.css */
 
-.surah-name {
-  font-family: 'Amiri', 'Scheherazade', 'Noto Naskh Arabic', serif;
-  font-size: 1.9rem;
-  font-weight: bold;
-  color: #030303;
-  text-align: center;
-  margin-top: 1rem;
-  margin-bottom: 1rem;
-  background: linear-gradient(to right, #D4AF37, #FBE8A6);
-  padding: 0.5rem 1rem;
-  border-radius: 9999px;
-  display: inline-block;
-}
-
 .quran-word {
   font-family: 'HafsSmart', 'Amiri', 'Scheherazade', 'Noto Naskh Arabic', serif;
   font-size: 1.5rem;
-  line-height: 2.5rem;
   transition: background-color 0.3s ease, color 0.3s ease;
-  display: inline;
-  padding: 0 0.2rem;
+  display: inline-block;
+  padding: 0 0.1rem;
   word-break: keep-all;
+  white-space: nowrap;
 }
 
 .ayah-marker {
   color: #D69E2E;
-  font-size: 1rem;
+  font-size: 1.8rem;
   vertical-align: middle;
+  display: inline-block;
+  /* margin: 0 0rem; */
 }
 
- /* .quran-page-content {
+.surah-name {
+  font-family: 'HafsSmart', 'Amiri', 'Scheherazade', 'Noto Naskh Arabic', serif;
+  font-size: 1.9rem;
+  font-weight: bold;
+  color: #030303;
+  text-align: center;
+  margin: 0.5rem auto;
+  background: linear-gradient(to right, #D4AF37, #FBE8A6);
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  display: block;
+  width: 60%;
+}
+
+.basmallah {
+  display: block;
+  text-align: center;
+  font-size: 1.3rem;     /* ↓ Smaller text */
+  margin: 0.2rem auto;   /* ↓ Less vertical space */
+  font-weight: normal;
+  line-height: 1.8rem;   /* ↓ Tighter line height */
+  letter-spacing: 0.03rem;
+}
+
+
+.surah-svg-wrapper {
+  position: relative;
+  /* width: 100%; */
+  max-width: 600px;
+  /* margin: 1rem auto; */
+  text-align: center;
+}
+
+.surah-svg-frame {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+.surah-svg-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: 'HafsSmart', 'Amiri', 'Scheherazade', serif;
+  font-size: 1.7rem;
+  font-weight: bold;
+  color: #D4AF37; /* gold */
+  white-space: nowrap;
+}
+
+
+ .quran-page-content {
   text-align: justify;
   font-family: 'KFGQPC Uthmanic Script HAFS';
   font-size: 1.7rem;
@@ -95,7 +136,7 @@
   background-color: #fff;
   border: 2px solid #e2e8f0;
   border-radius: 0.75rem;
-}  */
+} 
 
 @font-face {
   font-family: 'HafsSmart';
@@ -105,24 +146,47 @@
 .quran-structured-page {
   text-align: justify;
   direction: rtl;
-  font-family: 'HafsSmart', 'KFGQPC Uthmanic Script HAFS';
+  font-family: 'HafsSmart', 'KFGQPC Uthmanic Script HAFS', 'Amiri', serif;
   font-size: 1.8rem;
-  line-height: 0rem;
-  padding: 0rem;
+  line-height: 2.5rem;
+  padding: 1rem 2rem;
   background-color: #FAF8F0;
   border: 2px solid #e2e8f0;
   border-radius: 0.75rem;
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  text-justify: distribute; /* For better text distribution */
+  -webkit-text-justify: distribute;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 .line {
-  text-align: center;
-  line-height: 0rem;
-  margin-bottom: 0rem;
+  text-align: justify;
+  line-height: 2.5rem;
+  margin-bottom: 0.5rem;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  border: 1px solid black;
 }
 
 .line-text {
-  display: block;
+  display: inline-block;
   width: 100%;
+  text-align-last: justify;
+  -ms-text-align-last: justify;
+  -moz-text-align-last: justify;
+}
+
+/* For special lines like Surah names and Bismillah */
+.line.is-centered .line-text {
+  text-align: center;
+  text-align-last: center;
+  -ms-text-align-last: center;
+  -moz-text-align-last: center;
 }
 
 .quran-fixed-page {
@@ -131,11 +195,37 @@
   overflow-x: auto;
 }
 
+/* Responsive adjustments */
 @media (max-width: 640px) {
-  .quran-page-content {
-    height: 450px; /* slightly shorter for mobile */
-    font-size: 1.5rem;
+  .quran-structured-page {
+    font-size: 1.4rem;
+    padding: 1rem;
   }
+  
+  .surah-name {
+    font-size: 1.6rem;
+    width: 80%;
+  }
+  
+  .quran-word {
+    font-size: 1.3rem;
+  }
+}
+
+/* Dark mode adjustments */
+.dark .quran-structured-page {
+  background-color: #1a202c;
+  border-color: #2d3748;
+}
+
+.dark .line-text,
+.dark .quran-word {
+  color: #ffffff; /* White text in dark mode */
+}
+
+.dark .surah-name {
+  background: linear-gradient(to right, #B7950B, #F7DC6F);
+  color: #1a202c;
 }
 
 :root {
