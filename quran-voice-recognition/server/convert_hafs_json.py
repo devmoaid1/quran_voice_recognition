@@ -4,7 +4,7 @@ from collections import defaultdict
 
 INPUT_JSON   = "data/hafs_smart_v8.json"
 AYAH_RANGES  = "ayah_ranges.json"
-OUTPUT_DIR   = "../public/updated_quran_pages"
+OUTPUT_DIR   = "../public/fixed_updated_quran_pages"
 
 # Load data
 with open(INPUT_JSON, "r", encoding="utf-8") as f:
