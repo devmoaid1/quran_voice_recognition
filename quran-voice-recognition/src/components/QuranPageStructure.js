@@ -20,7 +20,7 @@ const QuranPageStructure = ({
 
   useEffect(() => {
     if (pageNumber) {
-      fetch(`/updated_quran_pages/page_${pageNumber}_ayahs.json`)
+      fetch(`/NEW_fixed_quran_pages/page_${pageNumber}_ayahs_updated.json`)
         .then((res) => res.json())
         .then((data) => {
           setPage(data[pageNumber]);
@@ -123,8 +123,10 @@ const QuranPageStructure = ({
 
           lineContent = wordIds.map((id) => {
             const wordNum = parseInt(id);
-            const wordText = page.wordData[id];
+            const wordEntry = page.wordData[id];
+            const wordText = wordEntry?.glyph || '';
             if (!wordText) return null;
+
 
             let isHighlighted = false;
             let isMatchedWord = matchedWords.includes(id);
