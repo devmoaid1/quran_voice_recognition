@@ -1,0 +1,144 @@
+{
+  "1": {
+    "surah_number": [
+    1
+],
+    "pageData": [
+      { "line_number": 1, "line_type": "surah_name", "first_word_id": null, "last_word_id": null, "text": null, "is_centered": true },
+      { "line_number": 2, "line_type": "ayah", "first_word_id": 1, "last_word_id": 4, "text": null, "is_centered": false },
+      { "line_number": 3, "line_type": "ayah", "first_word_id": 5, "last_word_id": 8, "text": null, "is_centered": false },
+      { "line_number": 4, "line_type": "ayah", "first_word_id": 9, "last_word_id": 13, "text": null, "is_centered": false },
+      { "line_number": 5, "line_type": "ayah", "first_word_id": 14, "last_word_id": 18, "text": null, "is_centered": false },
+      { "line_number": 6, "line_type": "ayah", "first_word_id": 19, "last_word_id": 23, "text": null, "is_centered": false },
+      { "line_number": 7, "line_type": "ayah", "first_word_id": 24, "last_word_id": 27, "text": null, "is_centered": false },
+      { "line_number": 8, "line_type": "ayah", "first_word_id": 28, "last_word_id": 29, "text": null, "is_centered": false }
+    ],
+    "ayahData": [
+      { "surahID": 1, "ayahID": 1, "ayah_begin": 1, "ayah_end": 4, "jozz": 1 },
+      { "surahID": 1, "ayahID": 2, "ayah_begin": 5, "ayah_end": 8, "jozz": 1 },
+      { "surahID": 1, "ayahID": 3, "ayah_begin": 9, "ayah_end": 10, "jozz": 1 },
+      { "surahID": 1, "ayahID": 4, "ayah_begin": 11, "ayah_end": 13, "jozz": 1 },
+      { "surahID": 1, "ayahID": 5, "ayah_begin": 14, "ayah_end": 17, "jozz": 1 },
+      { "surahID": 1, "ayahID": 6, "ayah_begin": 18, "ayah_end": 20, "jozz": 1 },
+      { "surahID": 1, "ayahID": 7, "ayah_begin": 21, "ayah_end": 29, "jozz": 1 }
+    ],
+    "wordData": {
+    "1": {
+        "glyph": "‏",
+        "emlaey": "بسم"
+    },
+    "2": {
+        "glyph": "‏‏",
+        "emlaey": "الله"
+    },
+    "3": {
+        "glyph": "‏‏‏‏",
+        "emlaey": "الرحمن"
+    },
+    "4": {
+        "glyph": "‏‏‏‏‏‏",
+        "emlaey": "الرحيم"
+    },
+    "5": {
+        "glyph": "‏‏‏‏",
+        "emlaey": "الحمد"
+    },
+    "6": {
+        "glyph": "‏",
+        "emlaey": "لله"
+    },
+    "7": {
+        "glyph": "‏‏",
+        "emlaey": "رب"
+    },
+    "8": {
+        "glyph": "‏‏‏‏‏‏",
+        "emlaey": "العالمين"
+    },
+    "9": {
+        "glyph": "‏‏‏‏",
+        "emlaey": "الرحمن"
+    },
+    "10": {
+        "glyph": "‏‏‏‏‏‏",
+        "emlaey": "الرحيم"
+    },
+    "11": {
+        "glyph": "‏‏‏",
+        "emlaey": "مالك"
+    },
+    "12": {
+        "glyph": "‏‏‏",
+        "emlaey": "يوم"
+    },
+    "13": {
+        "glyph": "‏‏‏‏",
+        "emlaey": "الدين"
+    },
+    "14": {
+        "glyph": "‏‏‏‏",
+        "emlaey": "إياك"
+    },
+    "15": {
+        "glyph": "‏‏‏‏",
+        "emlaey": "نعبد"
+    },
+    "16": {
+        "glyph": "‏‏‏‏",
+        "emlaey": "وإياك"
+    },
+    "17": {
+        "glyph": "‏‏‏‏‏",
+        "emlaey": "نستعين"
+    },
+    "18": {
+        "glyph": "‏‏‏‏‏",
+        "emlaey": "اهدنا"
+    },
+    "19": {
+        "glyph": "‏‏‏‏‏",
+        "emlaey": "الصراط"
+    },
+    "20": {
+        "glyph": "‏‏‏‏‏‏‏‏",
+        "emlaey": "المستقيم"
+    },
+    "21": {
+        "glyph": "‏‏‏",
+        "emlaey": "صراط"
+    },
+    "22": {
+        "glyph": "‏‏‏‏",
+        "emlaey": "الذين"
+    },
+    "23": {
+        "glyph": "‏‏‏‏‏",
+        "emlaey": "أنعمت"
+    },
+    "24": {
+        "glyph": "‏‏‏‏‏",
+        "emlaey": "عليهم"
+    },
+    "25": {
+        "glyph": "‏‏‏",
+        "emlaey": "غير"
+    },
+    "26": {
+        "glyph": "‏‏‏‏‏‏‏",
+        "emlaey": "المغضوب"
+    },
+    "27": {
+        "glyph": "‏‏‏‏‏",
+        "emlaey": "عليهم"
+    },
+    "28": {
+        "glyph": "‏‏",
+        "emlaey": "ولا"
+    },
+    "29": {
+        "glyph": "‏‏‏‏‏‏",
+        "emlaey": "الضالين"
+    }
+}
+  }
+}
