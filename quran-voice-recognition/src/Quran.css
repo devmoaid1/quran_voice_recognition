@@ -57,15 +57,16 @@
   font-family: 'HafsSmart', 'Amiri', 'Scheherazade', 'Noto Naskh Arabic', serif;
   font-size: 1.5rem;
   transition: background-color 0.3s ease, color 0.3s ease;
-  display: inline-block;
-  padding: 0 0.1rem;
+  display: inline-block;  /* it was inline-block */
+  padding: 0;
   word-break: keep-all;
   white-space: nowrap;
+  margin-right: 0.1rem;
 }
 
 .ayah-marker {
   color: #D69E2E;
-  font-size: 1.8rem;
+  font-size: 1.3rem;
   vertical-align: middle;
   display: inline-block;
   /* margin: 0 0rem; */
@@ -88,21 +89,37 @@
 .basmallah {
   display: block;
   text-align: center;
-  font-size: 1.3rem;     /* ↓ Smaller text */
-  margin: 0.2rem auto;   /* ↓ Less vertical space */
+  font-size: 1.5rem;     /* Same as .quran-word */
+  line-height: 2.5rem;   /* Same as .line */
+  margin: 0.25rem auto;
   font-weight: normal;
-  line-height: 1.8rem;   /* ↓ Tighter line height */
   letter-spacing: 0.03rem;
 }
+
+@media (max-width: 640px) {
+  .basmallah {
+    font-size: 1.3rem;
+    line-height: 2rem;
+  }
+}
+
+@media (max-width: 400px) {
+  .basmallah {
+    font-size: 1.1rem;
+    line-height: 1.8rem;
+  }
+}
+
+
 
 
 .surah-svg-wrapper {
   position: relative;
-  /* width: 100%; */
-  max-width: 600px;
-  /* margin: 1rem auto; */
+  width: 100%;
+  overflow: hidden;
   text-align: center;
 }
+
 
 .surah-svg-frame {
   width: 100%;
@@ -119,8 +136,20 @@
   font-family: 'HafsSmart', 'Amiri', 'Scheherazade', serif;
   font-size: 1.7rem;
   font-weight: bold;
-  color: #D4AF37; /* gold */
+  color: #D4AF37;
   white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .surah-svg-text {
+    font-size: 1.4rem;
+  }
+}
+
+@media (max-width: 400px) {
+  .surah-svg-text {
+    font-size: 1.2rem;
+  }
 }
 
 
@@ -144,7 +173,7 @@
 }
 
 .quran-structured-page {
-  text-align: justify;
+  text-align: right;
   direction: rtl;
   font-family: 'HafsSmart', 'KFGQPC Uthmanic Script HAFS', 'Amiri', serif;
   font-size: 1.8rem;
@@ -165,17 +194,18 @@
 
 .line {
   text-align: justify;
-  line-height: 2.5rem;
+  line-height: 2.5rem; /* Initially it was 2.5rem */
   margin-bottom: 0.5rem;
   width: 100%;
   display: flex;
   justify-content: space-between;
-  border: 1px solid black;
+  /* border: 1px solid black; */
 }
 
 .line-text {
   display: inline-block;
   width: 100%;
+  text-align: right;
   text-align-last: justify;
   -ms-text-align-last: justify;
   -moz-text-align-last: justify;
