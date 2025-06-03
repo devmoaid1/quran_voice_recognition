@@ -57,10 +57,10 @@
   font-family: 'HafsSmart', 'Amiri', 'Scheherazade', 'Noto Naskh Arabic', serif;
   font-size: 1.5rem;
   transition: background-color 0.3s ease, color 0.3s ease;
-  display: inline-block;  /* it was inline-block */
+  display: inline;
   padding: 0;
-  word-break: keep-all;
-  white-space: nowrap;
+  word-break: normal;
+  white-space: normal;
   margin-right: 0.1rem;
 }
 
@@ -69,7 +69,6 @@
   font-size: 1.3rem;
   vertical-align: middle;
   display: inline-block;
-  /* margin: 0 0rem; */
 }
 
 .surah-name {
@@ -89,8 +88,8 @@
 .basmallah {
   display: block;
   text-align: center;
-  font-size: 1.5rem;     /* Same as .quran-word */
-  line-height: 2.5rem;   /* Same as .line */
+  font-size: 1.5rem;
+  line-height: 2.5rem;
   margin: 0.25rem auto;
   font-weight: normal;
   letter-spacing: 0.03rem;
@@ -110,16 +109,12 @@
   }
 }
 
-
-
-
 .surah-svg-wrapper {
   position: relative;
   width: 100%;
   overflow: hidden;
   text-align: center;
 }
-
 
 .surah-svg-frame {
   width: 100%;
@@ -152,13 +147,11 @@
   }
 }
 
-
- .quran-page-content {
+.quran-page-content {
   text-align: justify;
   font-family: 'KFGQPC Uthmanic Script HAFS';
   font-size: 1.7rem;
   line-height: 1.5rem;
-  
   height: auto;
   overflow-y: visible;
   padding: 1rem;
@@ -185,21 +178,22 @@
   width: 100%;
   max-width: 800px;
   margin: 0 auto;
-  text-justify: distribute; /* For better text distribution */
+  text-justify: distribute;
   -webkit-text-justify: distribute;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  overflow-x: hidden;
 }
 
 .line {
   text-align: justify;
-  line-height: 2.5rem; /* Initially it was 2.5rem */
+  line-height: 2.5rem;
   margin-bottom: 0.5rem;
   width: 100%;
   display: flex;
   justify-content: space-between;
-  /* border: 1px solid black; */
+  overflow: visible;
 }
 
 .line-text {
@@ -209,6 +203,10 @@
   text-align-last: justify;
   -ms-text-align-last: justify;
   -moz-text-align-last: justify;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: none;
+  box-sizing: border-box;
 }
 
 /* For special lines like Surah names and Bismillah */
@@ -217,28 +215,131 @@
   text-align-last: center;
   -ms-text-align-last: center;
   -moz-text-align-last: center;
+  white-space: nowrap;
 }
 
 .quran-fixed-page {
-  width: 650px; /* or the exact width you need */
+  width: 650px;
   max-width: 100%;
   overflow-x: auto;
 }
 
-/* Responsive adjustments */
+/* Responsive adjustments - OPTIMIZED FOR BETTER LINE FIT */
 @media (max-width: 640px) {
   .quran-structured-page {
-    font-size: 1.4rem;
-    padding: 1rem;
+    font-size: 1.1rem; /* Reduced for better fit */
+    padding: 0.4rem 0.6rem; /* Reduced horizontal padding for more space */
+    line-height: 1.8rem; /* Tighter line spacing */
   }
   
   .surah-name {
-    font-size: 1.6rem;
-    width: 80%;
+    font-size: 1.3rem;
+    width: 85%;
+    padding: 0.3rem 0.6rem;
   }
   
   .quran-word {
-    font-size: 1.3rem;
+    font-size: 1rem; /* Smaller but still readable */
+    margin-right: 0.04rem; /* Reduced spacing between words */
+  }
+  
+  .line {
+    margin-bottom: 0.25rem; /* Tighter line spacing */
+    line-height: 1.8rem;
+  }
+  
+  .line-text {
+    padding: 0 2px;
+    letter-spacing: -0.01rem; /* Slight negative letter spacing to fit more */
+  }
+}
+
+@media (max-width: 480px) {
+  .quran-structured-page {
+    font-size: 0.95rem; /* Further reduced */
+    padding: 0.3rem 0.4rem; /* Minimal padding for max content width */
+    line-height: 1.6rem;
+  }
+  
+  .quran-word {
+    font-size: 0.9rem; /* Smaller but readable */
+    margin-right: 0.03rem;
+  }
+  
+  .surah-name {
+    font-size: 1.1rem;
+    width: 90%;
+    padding: 0.25rem 0.4rem;
+  }
+  
+  .line {
+    line-height: 1.6rem;
+    margin-bottom: 0.2rem;
+  }
+  
+  .line-text {
+    padding: 0 1px;
+    letter-spacing: -0.015rem; /* More negative spacing */
+  }
+}
+
+@media (max-width: 360px) {
+  .quran-structured-page {
+    font-size: 0.85rem; /* Balanced size - readable but compact */
+    padding: 0.2rem 0.3rem; /* Minimal padding */
+    line-height: 1.4rem;
+  }
+  
+  .quran-word {
+    font-size: 0.8rem; /* Small but still legible */
+    margin-right: 0.02rem;
+  }
+  
+  .surah-name {
+    font-size: 1rem;
+    width: 95%;
+    padding: 0.2rem 0.3rem;
+  }
+  
+  .line {
+    line-height: 1.4rem;
+    margin-bottom: 0.15rem;
+  }
+  
+  .line-text {
+    padding: 0;
+    letter-spacing: -0.02rem; /* Tighter letter spacing */
+    text-align: right;
+    text-align-last: justify;
+  }
+}
+
+/* Extra small screens */
+@media (max-width: 320px) {
+  .quran-structured-page {
+    font-size: 0.75rem; /* Minimum readable size */
+    padding: 0.15rem 0.2rem;
+    line-height: 1.3rem;
+  }
+  
+  .quran-word {
+    font-size: 0.7rem;
+    margin-right: 0.015rem;
+  }
+  
+  .surah-name {
+    font-size: 0.9rem;
+    width: 98%;
+    padding: 0.15rem 0.25rem;
+  }
+  
+  .line {
+    line-height: 1.3rem;
+    margin-bottom: 0.1rem;
+  }
+  
+  .line-text {
+    letter-spacing: -0.025rem; /* Maximum negative spacing */
   }
 }
 
@@ -250,7 +351,7 @@
 
 .dark .line-text,
 .dark .quran-word {
-  color: #ffffff; /* White text in dark mode */
+  color: #ffffff;
 }
 
 .dark .surah-name {
@@ -269,9 +370,3 @@ body {
   color: var(--text-dark);
   font-family: 'Cairo', sans-serif;
 }
-
-/* button {
-  background-color: var(--primary-gold);
-  color: var(--primary-gold);
-  border: none;
-} */

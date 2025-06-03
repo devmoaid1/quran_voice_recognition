@@ -44,38 +44,50 @@ const QuranPageStructure = ({
     const textElement = lineElement.querySelector('.line-text');
     if (!textElement) return null;
 
-    // Base font sizes for different screen sizes
+    // More conservative base font sizes for better responsive behavior
     const baseFontSizes = {
-      'extra-small': 16,
-      'small': 18,
-      'medium': 20,
-      'tablet': 22,
-      'large': 24
+      'extra-small': 14,
+      'small': 16,
+      'medium': 18,
+      'tablet': 20,
+      'large': 22
     };
 
-    let fontSize = baseFontSizes[screenSize] || 20;
-    const minFontSize = screenSize === 'extra-small' ? 12 : 14;
-    const maxFontSize = baseFontSizes[screenSize] * 1.2 || 28;
+    let fontSize = baseFontSizes[screenSize] || 18;
+    const minFontSize = screenSize === 'extra-small' ? 10 : 12;
+    const maxFontSize = baseFontSizes[screenSize] * 1.1 || 24; // Reduced multiplier
 
-    // Set initial font size
+    // Save original styles
+    const originalWhiteSpace = textElement.style.whiteSpace;
+    const originalTextAlign = textElement.style.textAlign;
+    
+    // Set styles for measurement
+    textElement.style.whiteSpace = 'normal';
+    textElement.style.textAlign = 'right'; // Use right align for measurement
     textElement.style.fontSize = `${fontSize}px`;
     
-    // Reduce font size until text fits
-    while (textElement.scrollWidth > containerWidth && fontSize > minFontSize) {
+    // Create a temporary clone for accurate measurement
+    const clone = textElement.cloneNode(true);
+    clone.style.position = 'absolute';
+    clone.style.visibility = 'hidden';
+    clone.style.width = `${containerWidth}px`;
+    clone.style.height = 'auto';
+    clone.style.whiteSpace = 'normal';
+    clone.style.textAlign = 'right';
+    document.body.appendChild(clone);
+    
+    // Adjust font size based on clone measurements
+    while (clone.scrollHeight > clone.offsetHeight * 1.5 && fontSize > minFontSize) {
       fontSize -= 0.5;
-      textElement.style.fontSize = `${fontSize}px`;
+      clone.style.fontSize = `${fontSize}px`;
     }
-
-    // If text is much smaller than container, increase font size
-    while (textElement.scrollWidth < containerWidth * 0.85 && fontSize < maxFontSize) {
-      const testSize = fontSize + 0.5;
-      textElement.style.fontSize = `${testSize}px`;
-      if (textElement.scrollWidth > containerWidth) {
-        textElement.style.fontSize = `${fontSize}px`;
-        break;
-      }
-      fontSize = testSize;
-    }
+    
+    // Clean up
+    document.body.removeChild(clone);
+    
+    // Restore original styles
+    textElement.style.whiteSpace = originalWhiteSpace;
+    textElement.style.textAlign = originalTextAlign;
 
     return fontSize;
   }, [screenSize]);
@@ -363,7 +375,7 @@ const QuranPageStructure = ({
             style={{
               minHeight: 'fit-content',
               width: '100%',
-              overflow: 'hidden'
+              overflow: 'visible' // Changed from 'hidden' to 'visible'
             }}
           >
             <div 
@@ -371,10 +383,16 @@ const QuranPageStructure = ({
               style={{
                 width: '100%',
                 fontSize: dynamicFontSize ? `${dynamicFontSize}px` : undefined,
-                whiteSpace: 'nowrap',
-                textAlign: isSpecialLine(line) ? 'center' : 'justify',
-                lineHeight: dynamicFontSize ? `${dynamicFontSize * 1.3}px` : undefined,
-                transition: 'font-size 0.3s ease'
+                whiteSpace: isSpecialLine(line) ? 'nowrap' : 'normal',
+                textAlign: isSpecialLine(line) ? 'center' : 'right', // Changed from justify to right for better mobile support
+                textAlignLast: isSpecialLine(line) ? 'center' : 'justify', // Keep justify for last line only
+                lineHeight: dynamicFontSize ? `${dynamicFontSize * 1.4}px` : undefined, // Increased line height
+                transition: 'font-size 0.3s ease',
+                wordWrap: 'break-word',
+                overflowWrap: 'break-word',
+                hyphens: 'none',
+                paddingRight: screenSize === 'extra-small' || screenSize === 'small' ? '4px' : '0', // Add padding on small screens
+                paddingLeft: screenSize === 'extra-small' || screenSize === 'small' ? '4px' : '0'
               }}
             >
               {lineContent}
