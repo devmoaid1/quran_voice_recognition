@@ -150,6 +150,38 @@ const RecordingSection = () => {
     }, 50);
   };
 
+  const handlePageChange = (newPage) => {
+    setSelectedPage(newPage);
+
+    // Find and set matching Juz
+    const matchingJuz = JuzData.find((j, index) => {
+      const startPage = j.page;
+      const endPage = JuzData[index + 1] ? JuzData[index + 1].page : 605;
+      return newPage >= startPage && newPage < endPage;
+    });
+    if (matchingJuz) {
+      setSelectedJuz(matchingJuz.value);
+    }
+
+    // Find and set matching Surah
+    const surahEntry = Object.entries(surahPages).find(
+      ([surahNum, startPage], idx, arr) => {
+        const nextStart = arr[idx + 1]?.[1] ?? 605;
+        return newPage >= startPage && newPage < nextStart;
+      }
+    );
+    if (surahEntry) {
+      const [surahNumber] = surahEntry;
+      setSelectedSurah(`surah_${surahNumber}`);
+      // Optionally highlight Ayah 1 of the Surah
+      setTimeout(() => {
+        setHighlightedAyah({ sura: parseInt(surahNumber), ayah: 1 });
+        console.log("📄 Page changed → Surah", surahNumber, "Ayah 1");
+      }, 50);
+    }
+  };
+
+
   
 
   const startRecording = async () => {
@@ -266,7 +298,7 @@ const RecordingSection = () => {
           <div className="w-1/3 max-w-xs">
             <select
               id="surah-dropdown"
-              className="w-full p-3 border rounded-lg bg-gray-50 shadow-md dark:bg-gray-800 dark:border-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 shadow-sm transition"
+              className="w-full p-3 border rounded-lg bg-gray-50 shadow-md dark:bg-gray-800 dark:border-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#D4AF37] shadow-sm transition"
               value={selectedSurah}
               onChange={handleSurahChange}
             >
@@ -285,7 +317,7 @@ const RecordingSection = () => {
           <div className="w-1/3 max-w-xs">
             <select
               id="juz-dropdown"
-              className="w-full p-3 border rounded-lg bg-gray-50 shadow-md dark:bg-gray-800 dark:border-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 shadow-sm transition"
+              className="w-full p-3 border rounded-lg bg-gray-50 shadow-md dark:bg-gray-800 dark:border-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#D4AF37] shadow-sm transition"
               value={selectedJuz || ""}
               onChange={handleJuzChange}
             >
@@ -324,23 +356,41 @@ const RecordingSection = () => {
         {/* Bottom Control Bar */}
         <div className="flex items-center justify-between w-full flex-wrap gap-4 px-3 mt-0">
           {/* Page Navigation Controls */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Previous Button */}
             <button
               className="px-2 py-1 rounded hover:bg-gray-300 dark:text-white dark:hover:bg-gray-600 disabled:opacity-50"
-              onClick={() => setSelectedPage(p => Math.max(p - 1, 1))}
+              onClick={() => handlePageChange(Math.max(selectedPage - 1, 1))}
               disabled={selectedPage <= 1}
             >
               &#60;
             </button>
-            <span className="text-base font-semibold dark:text-white">Page {selectedPage}</span>
+
+            {/* Page Dropdown */}
+            <select
+              value={selectedPage}
+              onChange={(e) => handlePageChange(Number(e.target.value))}
+              className="p-2 border rounded bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-[#D4AF37]"
+            >
+              <option disabled>-- Page --</option>
+              {Array.from({ length: 604 }, (_, i) => (
+                <option key={i + 1} value={i + 1}>
+                  Page {i + 1}
+                </option>
+              ))}
+            </select>
+
+            {/* Next Button */}
             <button
               className="px-2 py-1 rounded hover:bg-gray-300 dark:text-white dark:hover:bg-gray-600 disabled:opacity-50"
-              onClick={() => setSelectedPage(p => p + 1)}
+              onClick={() => handlePageChange(Math.min(selectedPage + 1, 604))}
               disabled={selectedPage >= 604}
             >
               &#62;
             </button>
+
           </div>
+
 
           {/* Transcription Text */}
           <div className="flex-1 text-sm text-gray-700 dark:text-gray-400 text-center sm:text-right truncate ">

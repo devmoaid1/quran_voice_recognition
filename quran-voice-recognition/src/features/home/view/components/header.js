@@ -94,13 +94,13 @@ function Header() {
       {showMobileMenu && (
         <div className="md:hidden bg-white dark:bg-gray-800 text-gray-800 dark:text-white px-6 py-4 shadow-md transition-all mt-20 z-40 fixed w-full">
           <ul className="flex flex-col gap-4 text-lg">
-            <li><a href="#">Home</a></li>
-            <li><a href="#">Services</a></li>
-            <li><a href="#">About Us</a></li>
+            <li><a href="#home" className="text-color-custom hover:text-primary-hover dark:text-white dark:hover:text-gray-400 transition">Home</a></li>
+            <li><a href="#quran" className="text-color-custom hover:text-primary-hover dark:text-white dark:hover:text-gray-400 transition">Qur’an</a></li>
+            {/* <li><a href="#">About Us</a></li> */}
             <li>
               <a
                 href="#contact"
-                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 block text-center"
+                className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-hover transition shadow block text-center"
               >
                 Contact Us
               </a>
@@ -108,7 +108,7 @@ function Header() {
             <li className="text-center mt-2">
               <button
                 onClick={() => setIsDarkMode(!isDarkMode)}
-                className="text-xl hover:text-green-600"
+                className="text-color-custom hover:text-primary-hover text-xl hover:text-gray-400"
               >
                 {isDarkMode ? '🌙 Dark' : '☀️ Light'}
               </button>
