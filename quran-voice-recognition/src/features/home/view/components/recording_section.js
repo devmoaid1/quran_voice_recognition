@@ -11,7 +11,7 @@ import { getPageFromAyah } from '../../../../core/utils/quranUtils';
 
 
 // Initialize Socket.IO connection
-const socket = io('https://rotten-poets-refuse.loca.lt/', {
+const socket = io('https://0k46li006gqt04-5000.proxy.runpod.net/', {
   transports: ["websocket"], // Force WebSocket-only transport
 });
 
@@ -417,7 +417,7 @@ const RecordingSection = () => {
                     <path fill="currentColor" d="M64 64h128v128H64z" />
                   </svg>
                 ) : (
-                  <svg className="w-8 h-8 text-white" viewBox="0 0 256 256">
+                  <svg className="w-8 h-8 text-[#D4AF37] dark:text-white" viewBox="0 0 256 256">
                     <path fill="currentColor" d="M80 128V64a48 48 0 0 1 96 0v64a48 48 0 0 1-96 0m128 0a8 8 0 0 0-16 0a64 64 0 0 1-128 0a8 8 0 0 0-16 0a80.11 80.11 0 0 0 72 79.6V240a8 8 0 0 0 16 0v-32.4a80.11 80.11 0 0 0 72-79.6" />
                   </svg>
                 )}
