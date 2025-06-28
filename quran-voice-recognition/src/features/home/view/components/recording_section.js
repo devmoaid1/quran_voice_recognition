@@ -11,7 +11,7 @@ import { getPageFromAyah } from '../../../../core/utils/quranUtils';
 
 
 // Initialize Socket.IO connection
-const socket = io('https://0k46li006gqt04-5000.proxy.runpod.net/', {
+const socket = io('https://elyt2uytu87vj8-5000.proxy.runpod.net/', {
   transports: ["websocket"], // Force WebSocket-only transport
 });
 
