@@ -9,6 +9,7 @@ import tempfile
 import threading
 import   numpy       as np
 import soundfile     as sf  # Use soundfile to save audio
+from    rapidfuzz   import fuzz
 from   flask_cors   import CORS
 from      io        import BytesIO
 from     pydub      import AudioSegment
@@ -17,101 +18,141 @@ from flask_socketio import SocketIO, emit
 from     flask      import Flask, request, jsonify
 from  transformers  import WhisperProcessor, WhisperForConditionalGeneration
 
+
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
 CORS(app,resources={r"/transcribe": {"origins": "*"}})
 
+# processor = WhisperProcessor.from_pretrained("openai/whisper-base")
+# model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-base").to("cuda").half()
+# forced_decoder_ids = processor.get_decoder_prompt_ids(language="arabic", task="transcribe")
 
-processor = WhisperProcessor.from_pretrained("distil_whisper_large_ama")
-model = WhisperForConditionalGeneration.from_pretrained("distil_whisper_large_ama/checkpoint-1500")
-model.to("cuda")
+processor = WhisperProcessor.from_pretrained("/content/drive/MyDrive/server/distil_whisper_large_test")
+model = WhisperForConditionalGeneration.from_pretrained("/content/drive/MyDrive/server/distil_whisper_large_test/checkpoint-1500").to("cuda").half()
 forced_decoder_ids = processor.get_decoder_prompt_ids(language="arabic", task="transcribe")
 
 # Load ayah word ranges
 with open('/content/drive/MyDrive/server/ayah_ranges.json', 'r', encoding='utf-8') as f:
     AYAH_DATA = json.load(f)
 
-# Surah List
-SURAH_LIST = {
-    78: "سورة النبأ",
-    79: "سورة النازعات",
-    80: "سورة عبس",
-    81: "سورة التكوير",
-    82: "سورة الانفطار",
-    83: "سورة المطففين",
-    84: "سورة الانشقاق",
-    85: "سورة البروج",
-    86: "سورة الطارق",
-    87: "سورة الأعلى",
-    88: "سورة الغاشية",
-    89: "سورة الفجر",
-    90: "سورة البلد",
-    91: "سورة الشمس",
-    92: "سورة الليل",
-    93: "سورة الضحى",
-    94: "سورة الشرح",
-    95: "سورة التين",
-    96: "سورة العلق",
-    97: "سورة القدر",
-    98: "سورة البينة",
-    99: "سورة الزلزلة",
-    100: "سورة العاديات",
-    101: "سورة القارعة",
-    102: "سورة التكاثر",
-    103: "سورة العصر",
-    104: "سورة الهمزة",
-    105: "سورة الفيل",
-    106: "سورة قريش",
-    107: "سورة الماعون",
-    108: "سورة الكوثر",
-    109: "سورة الكافرون",
-    110: "سورة النصر",
-    111: "سورة المسد",
-    112: "سورة الإخلاص",
-    113: "سورة الفلق",
-    114: "سورة الناس",
-}
 
 SURAH_STARTING_WORD_ID = {
-    "surah_1": 1,
-    "surah_78": 1,
-    "surah_79": 73,
-    "surah_80": 1,
-    "surah_81": 1,
-    "surah_82": 1,
-    "surah_83": 83,
-    "surah_84": 10,
-    "surah_85": 1,
-    "surah_86": 1,
-    "surah_87": 62,
-    "surah_88": 16,
-    "surah_89": 1,
-    "surah_90": 29,
-    "surah_91": 1,
-    "surah_92": 55,
-    "surah_93": 27,
-    "surah_94": 67,
-    "surah_95": 1,
-    "surah_96": 35,
-    "surah_97": 1,
-    "surah_98": 31,
-    "surah_99": 24,
-    "surah_100": 60,
-    "surah_101": 10,
-    "surah_102": 46,
-    "surah_103": 1,
-    "surah_104": 15,
-    "surah_105": 49,
-    "surah_106": 1,
-    "surah_107": 18,
-    "surah_108": 43,
-    "surah_109": 1,
-    "surah_110": 27,
-    "surah_111": 45,
-    "surah_112": 1,
-    "surah_113": 16,
-    "surah_114": 39
+    "surah_1": 1,  # الفاتحة
+    "surah_2": 30,  # البقرة
+    "surah_3": 6147,  # آل عمران
+    "surah_4": 9628,  # النساء
+    "surah_5": 13375,  # المائدة
+    "surah_6": 16179,  # الأنعام
+    "surah_7": 19229,  # الأعراف
+    "surah_8": 22549,  # الأنفال
+    "surah_9": 23783,  # التوبة
+    "surah_10": 26281,  # يونس
+    "surah_11": 28114,  # هود
+    "surah_12": 30031,  # يوسف
+    "surah_13": 31807,  # الرعد
+    "surah_14": 32661,  # إبراهيم
+    "surah_15": 33491,  # الحجر
+    "surah_16": 34145,  # النحل
+    "surah_17": 35989,  # الإسراء
+    "surah_18": 37545,  # الكهف
+    "surah_19": 39124,  # مريم
+    "surah_20": 40085,  # طه
+    "surah_21": 41420,  # الأنبياء
+    "surah_22": 42589,  # الحج
+    "surah_23": 43863,  # المؤمنون
+    "surah_24": 44913,  # النور
+    "surah_25": 46229,  # الفرقان
+    "surah_26": 47122,  # الشعراء
+    "surah_27": 48440,  # النمل
+    "surah_28": 49591,  # القصص
+    "surah_29": 51021,  # العنكبوت
+    "surah_30": 51997,  # الروم
+    "surah_31": 52814,  # لقمان
+    "surah_32": 53360,  # السجدة
+    "surah_33": 53732,  # الأحزاب
+    "surah_34": 55019,  # سبإ
+    "surah_35": 55902,  # فاطر
+    "surah_36": 56677,  # يس
+    "surah_37": 57402,  # الصافات
+    "surah_38": 58263,  # ص
+    "surah_39": 58996,  # الزمر
+    "surah_40": 60168,  # غافر
+    "surah_41": 61387,  # فصلت
+    "surah_42": 62179,  # الشورى
+    "surah_43": 63039,  # الزخرف
+    "surah_44": 63869,  # الدخان
+    "surah_45": 64215,  # الجاثية
+    "surah_46": 64703,  # الأحقاف
+    "surah_47": 65346,  # محمد
+    "surah_48": 65885,  # الفتح
+    "surah_49": 66445,  # الحجرات
+    "surah_50": 66792,  # ق
+    "surah_51": 67165,  # الذاريات
+    "surah_52": 67525,  # الطور
+    "surah_53": 67837,  # النجم
+    "surah_54": 68197,  # القمر
+    "surah_55": 68539,  # الرحمن
+    "surah_56": 68890,  # الواقعة
+    "surah_57": 69269,  # الحديد
+    "surah_58": 69843,  # المجادلة
+    "surah_59": 70315,  # الحشر
+    "surah_60": 70760,  # الممتحنة
+    "surah_61": 71108,  # الصف
+    "surah_62": 71329,  # الجمعة
+    "surah_63": 71504,  # المنافقون
+    "surah_64": 71684,  # التغابن
+    "surah_65": 71925,  # الطلاق
+    "surah_66": 72212,  # التحريم
+    "surah_67": 72461,  # الملك
+    "surah_68": 72794,  # القلم
+    "surah_69": 73094,  # الحاقة
+    "surah_70": 73352,  # المعارج
+    "surah_71": 73569,  # نوح
+    "surah_72": 73795,  # الجن
+    "surah_73": 74080,  # المزمل
+    "surah_74": 74279,  # المدثر
+    "surah_75": 74534,  # القيامة
+    "surah_76": 74698,  # الإنسان
+    "surah_77": 74941,  # المرسلات
+    "surah_78": 75122,  # النبأ
+    "surah_79": 75295,  # النازعات
+    "surah_80": 75474,  # عبس
+    "surah_81": 75607,  # التكوير
+    "surah_82": 75711,  # الانفطار
+    "surah_83": 75791,  # المطففين
+    "surah_84": 75960,  # الانشقاق
+    "surah_85": 76067,  # البروج
+    "surah_86": 76176,  # الطارق
+    "surah_87": 76237,  # الأعلى
+    "surah_88": 76309,  # الغاشية
+    "surah_89": 76401,  # الفجر
+    "surah_90": 76538,  # البلد
+    "surah_91": 76620,  # الشمس
+    "surah_92": 76674,  # الليل
+    "surah_93": 76745,  # الضحى
+    "surah_94": 76785,  # الشرح
+    "surah_95": 76812,  # التين
+    "surah_96": 76846,  # العلق
+    "surah_97": 76918,  # القدر
+    "surah_98": 76948,  # البينة
+    "surah_99": 77042,  # الزلزلة
+    "surah_100": 77078,  # العاديات
+    "surah_101": 77118,  # القارعة
+    "surah_102": 77154,  # التكاثر
+    "surah_103": 77182,  # العصر
+    "surah_104": 77196,  # الهمزة
+    "surah_105": 77229,  # الفيل
+    "surah_106": 77252,  # قريش
+    "surah_107": 77269,  # الماعون
+    "surah_108": 77294,  # الكوثر
+    "surah_109": 77304,  # الكافرون
+    "surah_110": 77330,  # النصر
+    "surah_111": 77349,  # المسد
+    "surah_112": 77372,  # الإخلاص
+    "surah_113": 77387,  # الفلق
+    "surah_114": 77410,  # الناس
 }
+
 
 @app.route('/')
 def index():
@@ -226,13 +267,25 @@ def handle_disconnect():
 
 @socketio.on('live_audio')
 def handle_live_audio(data):
+
+    print("🔥 live_audio event received")
+
     if 'audio' not in data or 'surah' not in data:
         emit('live_transcription', {'error': 'Missing audio or Surah data'})
         return
 
     surah_name = data['surah']
-    audio_chunk = data['audio']
-    print(f"Received audio for Surah: {surah_name}")
+
+    # Convert ArrayBuffer → numpy float32
+    pcm_bytes = data['audio']
+    speech_array = np.frombuffer(pcm_bytes, dtype=np.float32)
+
+    if speech_array.size < 16000:  # < 1 sec
+        print("⚠️ Chunk too small, skipping")
+        return
+
+    print(f"🎧 Received audio samples: {speech_array.shape}")
+
 
     surah_verses, surah_words = load_surah_files(surah_name)
     if surah_verses is None or surah_words is None:
@@ -262,7 +315,7 @@ def handle_live_audio(data):
         ).input_features.to("cuda")
 
         with torch.amp.autocast(device_type="cuda"):
-            predicted_ids = model.generate(input_features=input_features)
+            predicted_ids = model.generate(input_features=input_features, forced_decoder_ids=forced_decoder_ids)
 
         torch.cuda.empty_cache()
         transcription = processor.tokenizer.decode(predicted_ids[0], skip_special_tokens=True)
@@ -287,6 +340,7 @@ def handle_live_audio(data):
                 real_word_positions.append(idx)  # Real index inside original list
 
         normalized_transcription_words = [remove_harakat(w) for w in transcription.split()]
+
 
         # Match transcription words
         used_indices = set()
@@ -322,14 +376,25 @@ def handle_live_audio(data):
                 corrected_word_id = SURAH_STARTING_WORD_ID.get(surah_name, 1) + true_idx
                 matched_word_ids.append(str(corrected_word_id))
 
+        # Extract wrong word IDs from mismatches
+        wrong_word_ids = []
+        for wrong_word, correct_word in mismatches:
+            try:
+                index_in_quran = surah_words.index(correct_word)
+                corrected_id = SURAH_STARTING_WORD_ID.get(surah_name, 1) + index_in_quran
+                wrong_word_ids.append(str(corrected_id))
+            except ValueError:
+                continue
+
         print("Normalized Transcribed Words:", normalized_transcription_words)
         #print("Normalized Quran Words:", normalized_quran_words[:10])
         print("Matched Word IDs:", matched_word_ids, surah_name)
-
+        print("Wrong Word IDs:", wrong_word_ids, surah_name)
 
         match = re.match(r"(\d+)\|(\d+)\|(.*)", closest_verse.strip())
         if match:
             matched_sura, matched_ayah, _ = int(match.group(1)), int(match.group(2)), match.group(3)
+
             # ✅ EMIT WITH matched_ayah
             emit('live_transcription', {
                 'text': mapped_transcription,
@@ -340,7 +405,8 @@ def handle_live_audio(data):
                     'sura': matched_sura,
                     'ayah': matched_ayah
                 },
-                'matched_word_ids': matched_word_ids
+                'matched_word_ids': matched_word_ids,
+                'wrong_word_ids': wrong_word_ids  # ✅ Include this
             })
         else:
             print("Regex failed. Sending fallback emit.")
@@ -350,7 +416,8 @@ def handle_live_audio(data):
                 'closest_verse': closest_verse,
                 'mismatched_words': mismatches,
                 'surah_name': surah_name,
-                'matched_word_ids': matched_word_ids
+                'matched_word_ids': matched_word_ids,
+                'wrong_word_ids': wrong_word_ids  # ✅ Include this
             })
 
     except Exception as e:
@@ -408,21 +475,16 @@ def transcribe_audio():
 
     print(f'This is the original transcription : {transcription}')
 
-#   Load the words from the new word file
-    word_file_path = 'words_ama.txt'  # Replace this with the actual path to your word file
-    words = load_words(word_file_path)
-
-    # Map each word from the transcription to the closest word in the word file
-    final_transcription = map_transcription_words(transcription, words)
-
-    print(f"Final transcription: {final_transcription}")
-
     # Send the final transcription back to the client
     return jsonify({'text': transcription})
 
+# if __name__ == '__main__':
+#     # # Create the 'saved_audios' directory if it doesn't exist
+#     # os.makedirs('saved_audios', exist_ok=True)
+#     socketio.run(app,host='0.0.0.0',port=5000,debug=True, use_reloader=False)  # Disable the use of reloader
+def run_server():
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True, use_reloader=False)
 
-
-if __name__ == '__main__':
-    # # Create the 'saved_audios' directory if it doesn't exist
-    # os.makedirs('saved_audios', exist_ok=True)
-    socketio.run(app,host='0.0.0.0',port=5000,debug=True, use_reloader=False)  # Disable the use of reloader
+# Run Flask server in a separate thread
+server_thread = threading.Thread(target=run_server, daemon=True)
+server_thread.start()
