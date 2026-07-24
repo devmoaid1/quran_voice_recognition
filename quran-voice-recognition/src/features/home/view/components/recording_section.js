@@ -11,7 +11,7 @@ import { getPageFromAyah } from '../../../../core/utils/quranUtils';
 
 
 // Initialize Socket.IO connection
-const socket = io('https://elyt2uytu87vj8-5000.proxy.runpod.net/', {
+const socket = io('http://localhost:5001', {
   transports: ["websocket"], // Force WebSocket-only transport
 });
 
@@ -53,55 +53,56 @@ const RecordingSection = () => {
     };
   }, []);
 
-  // Subscribe to live transcription events only when recording.
+  // Subscribe to live transcription events whenever recording is active or just stopped.
+  // We keep the listener alive for a short grace period after stop so the final
+  // chunk result (which arrives after setIsRecording(false)) is not silently dropped.
+  const isRecordingRef = useRef(false);
   useEffect(() => {
-    if (isRecording) {      
-      const handleLiveTranscription = (data) => {
-        console.log("📥 Full live_transcription event:", data);
-      
-        setTranscription(data.text || 'No transcription received.');
-      
-        setMismatches(
-          data.mismatched_words?.length > 0
-            ? data.mismatched_words.map(([wrong, correct]) => `${wrong} → ${correct}`).join(', ')
-            : 'No mismatches detected'
-        );
-      
-        if (data.wrong_word_ids && Array.isArray(data.wrong_word_ids)) {
-          setWrongWords(data.wrong_word_ids.map(String));
-          console.log("⚡ Wrong Words:", data.wrong_word_ids);
-        } else {
-          setWrongWords([]);
-        }
-      
-        if (data.matched_word_ids && Array.isArray(data.matched_word_ids)) {
-          setMatchedWords(data.matched_word_ids.map(String));
-          console.log("⚡ Matched Words:", data.matched_word_ids);
-        } else {
-          setMatchedWords([]);
-        }
-      
-        if (data.matched_ayah) {
-          const { sura, ayah } = data.matched_ayah;
-          const page = getPageFromAyah(sura, ayah);
-          setSelectedPage(page);
-          if (
-            !highlightedAyah ||
-            highlightedAyah.sura !== sura ||
-            highlightedAyah.ayah !== ayah
-          ) {
-            setHighlightedAyah({ sura, ayah });
-          }
-        }
-      };   
-      
-      
-      socket.on('live_transcription', handleLiveTranscription);
-      return () => {
-        socket.off('live_transcription', handleLiveTranscription);
-      };
-    }
+    isRecordingRef.current = isRecording;
   }, [isRecording]);
+
+  useEffect(() => {
+    const handleLiveTranscription = (data) => {
+      console.log("📥 Full live_transcription event:", data);
+
+      setTranscription(data.text || 'No transcription received.');
+
+      setMismatches(
+        data.mismatched_words?.length > 0
+          ? data.mismatched_words.map(([wrong, correct]) => `${wrong} → ${correct}`).join(', ')
+          : 'No mismatches detected'
+      );
+
+      if (data.wrong_word_ids && Array.isArray(data.wrong_word_ids)) {
+        setWrongWords(data.wrong_word_ids.map(String));
+        console.log("⚡ Wrong Words:", data.wrong_word_ids);
+      } else {
+        setWrongWords([]);
+      }
+
+      if (data.matched_word_ids && Array.isArray(data.matched_word_ids)) {
+        setMatchedWords(data.matched_word_ids.map(String));
+        console.log("⚡ Matched Words:", data.matched_word_ids);
+      } else {
+        setMatchedWords([]);
+      }
+
+      if (data.matched_ayah) {
+        const { sura, ayah } = data.matched_ayah;
+        // Fetch the page first, then set the highlight so both state updates
+        // land in the same render — eliminating the page/highlight race condition.
+        getPageFromAyah(sura, ayah).then((page) => {
+          setSelectedPage(page);
+          setHighlightedAyah({ sura, ayah });
+        });
+      }
+    };
+
+    socket.on('live_transcription', handleLiveTranscription);
+    return () => {
+      socket.off('live_transcription', handleLiveTranscription);
+    };
+  }, []);
   
 
   // Handle Surah selection

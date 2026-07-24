@@ -3,426 +3,336 @@ import re
 import wave
 import json
 import torch
-import difflib # Import difflib to compare strings
+import difflib
 import librosa
-import tempfile
-import threading
-import   numpy       as np
-import soundfile     as sf  # Use soundfile to save audio
-from   flask_cors   import CORS
-from      io        import BytesIO
-from     pydub      import AudioSegment
-from    difflib     import SequenceMatcher
+import numpy as np
+import soundfile as sf
+from flask_cors import CORS
+from io import BytesIO
+from pydub import AudioSegment
+from difflib import SequenceMatcher
 from flask_socketio import SocketIO, emit
-from     flask      import Flask, request, jsonify
-from  transformers  import WhisperProcessor, WhisperForConditionalGeneration
+from flask import Flask, request, jsonify
+from transformers import WhisperProcessor, WhisperForConditionalGeneration
 
+# ── Device ────────────────────────────────────────────────────────────────────
+if torch.backends.mps.is_available():
+    DEVICE = "mps"
+elif torch.cuda.is_available():
+    DEVICE = "cuda"
+else:
+    DEVICE = "cpu"
+print(f"Using device: {DEVICE}")
+
+# ── Paths (relative to this file) ────────────────────────────────────────────
+BASE_DIR         = os.path.dirname(os.path.abspath(__file__))
+MODEL_DIR        = os.path.join(BASE_DIR, "distil_whisper_large_ama")
+CHECKPOINT_DIR   = os.path.join(MODEL_DIR, "checkpoint-1000")
+WORDS_DIR        = os.path.join(BASE_DIR, "surahs_word")
+VERSES_DIR       = os.path.join(BASE_DIR, "surahs_versus")
+AYAH_RANGES_FILE = os.path.join(BASE_DIR, "ayah_ranges.json")
+
+# ── App ───────────────────────────────────────────────────────────────────────
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
-CORS(app,resources={r"/transcribe": {"origins": "*"}})
+CORS(app)
 
+# ── Model ─────────────────────────────────────────────────────────────────────
+print("Loading model…")
+processor = WhisperProcessor.from_pretrained(MODEL_DIR)
+model = WhisperForConditionalGeneration.from_pretrained(CHECKPOINT_DIR)
+model.to(DEVICE)
+model.eval()
+print("Model loaded.")
 
-processor = WhisperProcessor.from_pretrained("distil_whisper_large_ama")
-model = WhisperForConditionalGeneration.from_pretrained("distil_whisper_large_ama/checkpoint-1500")
-model.to("cuda")
-forced_decoder_ids = processor.get_decoder_prompt_ids(language="arabic", task="transcribe")
-
-# Load ayah word ranges
-with open('/content/drive/MyDrive/server/ayah_ranges.json', 'r', encoding='utf-8') as f:
+# ── Static data ───────────────────────────────────────────────────────────────
+with open(AYAH_RANGES_FILE, encoding="utf-8") as f:
     AYAH_DATA = json.load(f)
 
-# Surah List
-SURAH_LIST = {
-    78: "سورة النبأ",
-    79: "سورة النازعات",
-    80: "سورة عبس",
-    81: "سورة التكوير",
-    82: "سورة الانفطار",
-    83: "سورة المطففين",
-    84: "سورة الانشقاق",
-    85: "سورة البروج",
-    86: "سورة الطارق",
-    87: "سورة الأعلى",
-    88: "سورة الغاشية",
-    89: "سورة الفجر",
-    90: "سورة البلد",
-    91: "سورة الشمس",
-    92: "سورة الليل",
-    93: "سورة الضحى",
-    94: "سورة الشرح",
-    95: "سورة التين",
-    96: "سورة العلق",
-    97: "سورة القدر",
-    98: "سورة البينة",
-    99: "سورة الزلزلة",
-    100: "سورة العاديات",
-    101: "سورة القارعة",
-    102: "سورة التكاثر",
-    103: "سورة العصر",
-    104: "سورة الهمزة",
-    105: "سورة الفيل",
-    106: "سورة قريش",
-    107: "سورة الماعون",
-    108: "سورة الكوثر",
-    109: "سورة الكافرون",
-    110: "سورة النصر",
-    111: "سورة المسد",
-    112: "سورة الإخلاص",
-    113: "سورة الفلق",
-    114: "سورة الناس",
-}
-
+# Global word ID of the first word of each surah (= ayah_begin of ayah 1 in page JSON).
+# Used to convert local (0-based) ayah_ranges indices ↔ global word IDs.
 SURAH_STARTING_WORD_ID = {
-    "surah_1": 1,
-    "surah_78": 1,
-    "surah_79": 73,
-    "surah_80": 1,
-    "surah_81": 1,
-    "surah_82": 1,
-    "surah_83": 83,
-    "surah_84": 10,
-    "surah_85": 1,
-    "surah_86": 1,
-    "surah_87": 62,
-    "surah_88": 16,
-    "surah_89": 1,
-    "surah_90": 29,
-    "surah_91": 1,
-    "surah_92": 55,
-    "surah_93": 27,
-    "surah_94": 67,
-    "surah_95": 1,
-    "surah_96": 35,
-    "surah_97": 1,
-    "surah_98": 31,
-    "surah_99": 24,
-    "surah_100": 60,
-    "surah_101": 10,
-    "surah_102": 46,
-    "surah_103": 1,
-    "surah_104": 15,
-    "surah_105": 49,
-    "surah_106": 1,
-    "surah_107": 18,
-    "surah_108": 43,
-    "surah_109": 1,
-    "surah_110": 27,
-    "surah_111": 45,
-    "surah_112": 1,
-    "surah_113": 16,
-    "surah_114": 39
+    "surah_1":   1,     "surah_78":  75122, "surah_79":  75295, "surah_80":  75474,
+    "surah_81":  75607, "surah_82":  75711, "surah_83":  75791, "surah_84":  75960,
+    "surah_85":  76067, "surah_86":  76176, "surah_87":  76237, "surah_88":  76309,
+    "surah_89":  76401, "surah_90":  76538, "surah_91":  76620, "surah_92":  76674,
+    "surah_93":  76745, "surah_94":  76785, "surah_95":  76812, "surah_96":  76846,
+    "surah_97":  76918, "surah_98":  76948, "surah_99":  77042, "surah_100": 77078,
+    "surah_101": 77118, "surah_102": 77154, "surah_103": 77182, "surah_104": 77196,
+    "surah_105": 77229, "surah_106": 77252, "surah_107": 77269, "surah_108": 77294,
+    "surah_109": 77304, "surah_110": 77330, "surah_111": 77349, "surah_112": 77372,
+    "surah_113": 77387, "surah_114": 77410,
 }
 
-@app.route('/')
-def index():
-    return "Whisper Real-time Transcription Server"
-
-def save_wav_file(audio_data, filename, channels=1, rate=16000):
-    """Save raw audio data as a WAV file."""
-    with wave.open(filename, 'wb') as wav_file:
-        wav_file.setnchannels(channels)  # Mono
-        wav_file.setsampwidth(2)  # 16-bit samples
-        wav_file.setframerate(rate)
-        wav_file.writeframes(audio_data)
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def load_surah_files(surah_name):
-    """Load the correct Surah's word and verse files."""
-    # verse_file = os.path.join(SURAH_DATA_PATH, f"{surah_name}_verses.txt")
-    # word_file = os.path.join(SURAH_DATA_PATH, f"{surah_name}_words.txt")
+    """Load word list and verse list for the given surah."""
+    word_file  = os.path.join(WORDS_DIR,  f"{surah_name}.txt")
+    verse_file = os.path.join(VERSES_DIR, f"{surah_name}.txt")
 
-    # Construct file paths
-    word_file = f"/content/drive/MyDrive/server/surahs_word_no_harakat/{surah_name}.txt"
-    verse_file = f"/content/drive/MyDrive/server/surahs_versus_no_harakat/{surah_name}.txt"
-
-    if not os.path.exists(verse_file) or not os.path.exists(word_file):
-        print(f"Error: Missing files for Surah {surah_name}")
+    if not os.path.exists(word_file) or not os.path.exists(verse_file):
+        print(f"Missing files for {surah_name}")
         return None, None
 
-    with open(verse_file, "r", encoding="utf-8") as vf:
-        surah_verses = vf.readlines()
+    with open(word_file, encoding="utf-8") as f:
+        surah_words = [line.strip() for line in f if line.strip()]
 
-    with open(word_file, "r", encoding="utf-8") as wf:
-        surah_words = [line.strip() for line in wf.readlines()]
+    with open(verse_file, encoding="utf-8") as f:
+        surah_verses = [line.strip() for line in f if line.strip()]
 
     return surah_verses, surah_words
 
+
 def remove_harakat(text):
-    """Remove Harakat (Tashkeel) from Arabic text for better comparison."""
-    harakat_pattern = re.compile(r'[\u064B-\u065F\u0610-\u061A]')
-    return harakat_pattern.sub('', text)
-
-def find_closest_word(transcription_word, words):
-    """Find the closest matching word to the given transcription word."""
-    best_match = None
-    best_score = 0.0
-    for word in words:
-        similarity = difflib.SequenceMatcher(None, transcription_word, word).ratio()
-        if similarity > best_score:
-            best_score = similarity
-            best_match = word
-    print(f"Comparing '{transcription_word}' with '{best_match}' (score: {best_score})")  # Debugging
-    return best_match if best_match else transcription_word
-
-def map_transcription_words(transcription, words):
-    """Map transcribed words to the closest Quranic words."""
-    transcription_words = transcription.split()
-    mismatches = []
-    mapped_transcription = []
-
-    normalized_words = [remove_harakat(word) for word in words]
-
-    for word in transcription_words:
-        closest_word = find_closest_word(word, normalized_words)
-
-        if closest_word != word:
-            original_word = words[normalized_words.index(closest_word)]
-            mapped_transcription.append(f"({word}) {original_word}")
-            mismatches.append((word, original_word))
-        else:
-            original_word = words[normalized_words.index(closest_word)]
-            mapped_transcription.append(original_word)
-
-    print(f"Mapped Transcription: {' '.join(mapped_transcription)}")  # Debugging
-    print(f"Mismatches: {mismatches}")  # Debugging
-    return ' '.join(mapped_transcription), mismatches
-
-def compare_transcription_with_verses(transcription, surah_verses):
-    """Find the closest Quranic verse to the transcribed text."""
-    closest_verse = difflib.get_close_matches(transcription, surah_verses, n=1)
-    return closest_verse[0] if closest_verse else "No close verse found"
+    """Strip Arabic diacritics."""
+    return re.sub(r'[\u064B-\u065F\u0610-\u061A]', '', text)
 
 
+def find_matched_ayah(surah_name, matched_word_ids):
+    """Given a list of matched global word IDs, find which ayah most words fall in."""
+    if not matched_word_ids or surah_name not in AYAH_DATA:
+        return None
 
-def find_best_matching_window(trans_text, quran_words, starting_word_id, window_size=7):
-    """Find best matching window of Quran words to transcription text."""
-    best_score = 0
-    best_window_start = None
+    surah_number = int(surah_name.replace("surah_", ""))
+    starting_id  = SURAH_STARTING_WORD_ID.get(surah_name, 1)
+    ayah_ranges  = AYAH_DATA[surah_name]
 
-    for start_idx in range(len(quran_words)):
-        for end_idx in range(start_idx+1, min(start_idx+window_size+1, len(quran_words)+1)):
-            phrase = " ".join(quran_words[start_idx:end_idx])
-            score = SequenceMatcher(None, trans_text, phrase).ratio()
+    # Convert global IDs → local indices
+    local_indices = [int(wid) - starting_id for wid in matched_word_ids]
+
+    # Count votes per ayah
+    votes = {}
+    for local_idx in local_indices:
+        for entry in ayah_ranges:
+            if entry["ayah_begin"] <= local_idx <= entry["ayah_end"]:
+                ayah_id = entry["ayahID"]
+                votes[ayah_id] = votes.get(ayah_id, 0) + 1
+                break
+
+    if not votes:
+        return None
+
+    best_ayah = max(votes, key=votes.get)
+    return {"sura": surah_number, "ayah": best_ayah}
+
+
+def map_transcription_words(transcription, surah_words, surah_name):
+    """Fuzzy-match each transcribed word to its Quran equivalent.
+    Returns (mapped_text, mismatches, matched_word_ids).
+    """
+    trans_words   = transcription.split()
+    norm_quran    = [remove_harakat(w) for w in surah_words]
+    starting_id   = SURAH_STARTING_WORD_ID.get(surah_name, 1)
+
+    # Filter out digit-only entries (ayah markers)
+    filtered_words    = []
+    filtered_positions = []
+    for idx, w in enumerate(surah_words):
+        if not w.strip().isdigit():
+            filtered_words.append(remove_harakat(w))
+            filtered_positions.append(idx)
+
+    mismatches       = []
+    mapped           = []
+    matched_word_ids = []
+    wrong_word_ids   = []
+    used_indices     = set()
+    last_idx         = -1
+
+    for tw in trans_words:
+        tw_norm      = remove_harakat(tw)
+        best_idx     = None
+        best_score   = 0.0
+
+        # Forward search first
+        for i in range(last_idx + 1, len(filtered_words)):
+            if i in used_indices:
+                continue
+            score = SequenceMatcher(None, tw_norm, filtered_words[i]).ratio()
             if score > best_score:
                 best_score = score
-                best_window_start = (start_idx, end_idx)
+                best_idx   = i
 
-    if best_window_start and best_score > 0.75:
-        start_idx, end_idx = best_window_start
-        matched_ids = [str(starting_word_id + idx) for idx in range(start_idx, end_idx)]
-        return matched_ids
-    else:
-        return []
-
-
-@socketio.on('connect')
-def handle_connect():
-    print("Client connected")
-    # Emit a connection message to the client
-    emit('connect_message', {'message': 'Connected successfully to server!'})
-
-@socketio.on('disconnect')
-def handle_disconnect():
-    print("Client disconnected")
-
-@socketio.on('live_audio')
-def handle_live_audio(data):
-    if 'audio' not in data or 'surah' not in data:
-        emit('live_transcription', {'error': 'Missing audio or Surah data'})
-        return
-
-    surah_name = data['surah']
-    audio_chunk = data['audio']
-    print(f"Received audio for Surah: {surah_name}")
-
-    surah_verses, surah_words = load_surah_files(surah_name)
-    if surah_verses is None or surah_words is None:
-        emit('live_transcription', {'error': f'Surah {surah_name} not found'})
-        return
-
-    audio_file = BytesIO(audio_chunk)
-
-    try:
-        audio_segment = AudioSegment.from_file(audio_file, format="ogg")
-        wav_buffer = BytesIO()
-        audio_segment.export(wav_buffer, format="wav")
-        wav_buffer.seek(0)
-
-        speech_array, _ = librosa.load(
-            wav_buffer,
-            sr=16000,
-            mono=True,
-            dtype=np.float32,
-            res_type='soxr_hq'
-        )
-
-        input_features = processor.feature_extractor(
-            speech_array,
-            sampling_rate=16000,
-            return_tensors="pt"
-        ).input_features.to("cuda")
-
-        with torch.amp.autocast(device_type="cuda"):
-            predicted_ids = model.generate(input_features=input_features)
-
-        torch.cuda.empty_cache()
-        transcription = processor.tokenizer.decode(predicted_ids[0], skip_special_tokens=True)
-        print(f'Live Transcription: {transcription}')
-
-        mapped_transcription, mismatches = map_transcription_words(transcription, surah_words)
-        closest_verse = compare_transcription_with_verses(mapped_transcription, surah_verses)
-        print("Mapped Transcription:", mapped_transcription)
-        print("Closest Verse:", closest_verse)
-
-        starting_word_id = SURAH_STARTING_WORD_ID.get(surah_name, 1)
-
-        matched_word_ids = []
-
-        # Prepare: Skip ayah numbers from surah_words
-        filtered_quran_words = []
-        real_word_positions = []
-
-        for idx, word in enumerate(surah_words):
-            if not word.strip().isdigit():
-                filtered_quran_words.append(remove_harakat(word))
-                real_word_positions.append(idx)  # Real index inside original list
-
-        normalized_transcription_words = [remove_harakat(w) for w in transcription.split()]
-
-        # Match transcription words
-        used_indices = set()
-        last_used_index = -1  # Track last matched word index
-
-        for trans_word in normalized_transcription_words:
-            best_match_idx = None
-            best_score = 0.0
-
-            # Start search from next word after last matched
-            for i in range(last_used_index + 1, len(filtered_quran_words)):
+        # Fallback: full scan
+        if best_idx is None or best_score < 0.8:
+            for i in range(len(filtered_words)):
                 if i in used_indices:
                     continue
-                score = difflib.SequenceMatcher(None, trans_word, filtered_quran_words[i]).ratio()
+                score = SequenceMatcher(None, tw_norm, filtered_words[i]).ratio()
                 if score > best_score:
                     best_score = score
-                    best_match_idx = i
+                    best_idx   = i
 
-            # fallback to full scan if no match in forward search
-            if best_match_idx is None or best_score < 0.8:
-                for i in range(len(filtered_quran_words)):
-                    if i in used_indices:
-                        continue
-                    score = difflib.SequenceMatcher(None, trans_word, filtered_quran_words[i]).ratio()
-                    if score > best_score:
-                        best_score = score
-                        best_match_idx = i
+        if best_idx is not None and best_score > 0.8:
+            # Good match — word was recognised and located in the surah.
+            used_indices.add(best_idx)
+            last_idx       = best_idx
+            real_idx       = filtered_positions[best_idx]
+            original_word  = surah_words[real_idx]
+            global_word_id = starting_id + real_idx
+            matched_word_ids.append(str(global_word_id))
 
-            if best_match_idx is not None and best_score > 0.8:
-                used_indices.add(best_match_idx)
-                last_used_index = best_match_idx
-                true_idx = real_word_positions[best_match_idx]
-                corrected_word_id = SURAH_STARTING_WORD_ID.get(surah_name, 1) + true_idx
-                matched_word_ids.append(str(corrected_word_id))
-
-        print("Normalized Transcribed Words:", normalized_transcription_words)
-        #print("Normalized Quran Words:", normalized_quran_words[:10])
-        print("Matched Word IDs:", matched_word_ids, surah_name)
-
-
-        match = re.match(r"(\d+)\|(\d+)\|(.*)", closest_verse.strip())
-        if match:
-            matched_sura, matched_ayah, _ = int(match.group(1)), int(match.group(2)), match.group(3)
-            # ✅ EMIT WITH matched_ayah
-            emit('live_transcription', {
-                'text': mapped_transcription,
-                'closest_verse': closest_verse,
-                'mismatched_words': mismatches,
-                'surah_name': surah_name,
-                'matched_ayah': {
-                    'sura': matched_sura,
-                    'ayah': matched_ayah
-                },
-                'matched_word_ids': matched_word_ids
-            })
+            if remove_harakat(original_word) != tw_norm:
+                mapped.append(f"({tw}) {original_word}")
+                mismatches.append((tw, original_word))
+                wrong_word_ids.append(str(global_word_id))
+            else:
+                mapped.append(original_word)
         else:
-            print("Regex failed. Sending fallback emit.")
-            # ✅ EMIT WITHOUT matched_ayah
-            emit('live_transcription', {
-                'text': mapped_transcription,
-                'closest_verse': closest_verse,
-                'mismatched_words': mismatches,
-                'surah_name': surah_name,
-                'matched_word_ids': matched_word_ids
-            })
+            # No match above threshold — the user said a word that doesn't resemble
+            # anything in the surah at this score.  We know positionally this should
+            # be the word right after the last matched one, so flag that expected word
+            # as wrong (substitution error).
+            next_idx = last_idx + 1
+            if next_idx < len(filtered_words):
+                real_idx       = filtered_positions[next_idx]
+                original_word  = surah_words[real_idx]
+                global_word_id = starting_id + real_idx
+                matched_word_ids.append(str(global_word_id))
+                mismatches.append((tw, original_word))
+                wrong_word_ids.append(str(global_word_id))
+                mapped.append(f"({tw}) {original_word}")
+                used_indices.add(next_idx)
+                last_idx = next_idx
+            else:
+                mapped.append(tw)
+
+    return " ".join(mapped), mismatches, matched_word_ids, wrong_word_ids
+
+
+def find_closest_verse(transcription, surah_verses):
+    """Return the closest verse text and its 1-based index."""
+    norm_trans  = remove_harakat(transcription)
+    norm_verses = [remove_harakat(v) for v in surah_verses]
+    matches     = difflib.get_close_matches(norm_trans, norm_verses, n=1, cutoff=0.3)
+    if matches:
+        idx = norm_verses.index(matches[0])
+        return surah_verses[idx], idx + 1   # 1-based ayah number
+    return None, None
+
+
+def transcribe_audio_array(speech_array):
+    """Run Whisper inference on a float32 16kHz mono array."""
+    input_features = processor.feature_extractor(
+        speech_array,
+        sampling_rate=16000,
+        return_tensors="pt"
+    ).input_features.to(DEVICE)
+
+    with torch.no_grad():
+        predicted_ids = model.generate(input_features=input_features)
+
+    if DEVICE == "mps":
+        torch.mps.empty_cache()
+    elif DEVICE == "cuda":
+        torch.cuda.empty_cache()
+
+    return processor.tokenizer.decode(predicted_ids[0], skip_special_tokens=True)
+
+
+def load_audio_from_bytes(audio_bytes, fmt="ogg"):
+    """Convert raw audio bytes → float32 16kHz mono numpy array."""
+    buf = BytesIO(audio_bytes)
+    segment = AudioSegment.from_file(buf, format=fmt)
+    wav_buf = BytesIO()
+    segment.export(wav_buf, format="wav")
+    wav_buf.seek(0)
+    speech_array, _ = librosa.load(
+        wav_buf,
+        sr=16000,
+        mono=True,
+        dtype=np.float32,
+        res_type="soxr_hq",
+    )
+    return speech_array
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
+@app.route("/")
+def index():
+    return "Whisper Real-time Transcription Server"
+
+
+@app.route("/transcribe", methods=["POST"])
+def transcribe_audio():
+    if "audio" not in request.files:
+        return jsonify({"error": "No audio file provided"}), 400
+
+    audio_file    = request.files["audio"]
+    speech_array  = load_audio_from_bytes(audio_file.read(), fmt="wav")
+    transcription = transcribe_audio_array(speech_array)
+    print(f"Transcription: {transcription}")
+    return jsonify({"text": transcription})
+
+
+# ── Socket.IO events ──────────────────────────────────────────────────────────
+
+@socketio.on("connect")
+def handle_connect():
+    print("Client connected:", request.sid)
+    emit("connect_message", {"message": "Connected successfully to server!"})
+
+
+@socketio.on("disconnect")
+def handle_disconnect():
+    print("Client disconnected:", request.sid)
+
+
+@socketio.on("live_audio")
+def handle_live_audio(data):
+    if "audio" not in data or "surah" not in data:
+        emit("live_transcription", {"error": "Missing audio or surah data"})
+        return
+
+    surah_name  = data["surah"]
+    audio_chunk = data["audio"]
+    print(f"Received audio for: {surah_name}")
+
+    surah_verses, surah_words = load_surah_files(surah_name)
+    if surah_verses is None:
+        emit("live_transcription", {"error": f"Surah {surah_name} not found"})
+        return
+
+    try:
+        speech_array  = load_audio_from_bytes(bytes(audio_chunk))
+        transcription = transcribe_audio_array(speech_array)
+        print(f"Transcription: {transcription}")
+
+        mapped_text, mismatches, matched_word_ids, wrong_word_ids = map_transcription_words(
+            transcription, surah_words, surah_name
+        )
+
+        closest_verse, ayah_number = find_closest_verse(mapped_text, surah_verses)
+        print(f"Closest verse: {closest_verse} (ayah {ayah_number})")
+
+        surah_number  = int(surah_name.replace("surah_", ""))
+        matched_ayah  = find_matched_ayah(surah_name, matched_word_ids)
+
+        # Fallback: use verse-match ayah number if word matching didn't land
+        if matched_ayah is None and ayah_number is not None:
+            matched_ayah = {"sura": surah_number, "ayah": ayah_number}
+
+        payload = {
+            "text":            mapped_text,
+            "closest_verse":   closest_verse or "",
+            "mismatched_words": mismatches,
+            "surah_name":      surah_name,
+            "matched_word_ids": matched_word_ids,
+            "wrong_word_ids":  wrong_word_ids,
+        }
+        if matched_ayah:
+            payload["matched_ayah"] = matched_ayah
+
+        emit("live_transcription", payload)
 
     except Exception as e:
         print(f"Error processing audio: {e}")
-        emit('live_transcription', {'error': f'Error processing audio: {e}'})
+        emit("live_transcription", {"error": str(e)})
 
 
+# ── Entry point ───────────────────────────────────────────────────────────────
 
-
-@app.route('/transcribe', methods=['POST'])
-def transcribe_audio():
-    if 'audio' not in request.files:
-        return jsonify({'error': 'No audio file provided'}), 400
-
-    audio_file = request.files['audio']
-
-    # Convert to WAV in-memory
-    audio_segment = AudioSegment.from_file(audio_file)
-    wav_buffer = BytesIO()
-    audio_segment.export(wav_buffer, format="wav")
-    wav_buffer.seek(0)
-
-    speech_array, original_sampling_rate = librosa.load(
-        wav_buffer,
-        sr=16000,          # Force target sample rate
-        mono=True,          # Force mono conversion
-        dtype=np.float32,   # Match training dtype
-        res_type='soxr_hq'  # Match libsndfile's resampling
-    )
-
-   # Resample audio
-    target_sampling_rate = 16000
-    if original_sampling_rate != target_sampling_rate:
-        speech_array = librosa.resample(speech_array, orig_sr=original_sampling_rate, target_sr=target_sampling_rate,res_type="kaiser_best")
-
-
-    try:
-        print("Extracting features and moving to CUDA...")
-        input_features = processor.feature_extractor(
-            speech_array,
-            sampling_rate=target_sampling_rate,
-            return_tensors="pt"
-        ).input_features.to("cuda")
-        print("Features exported to CUDA successfully.")
-    except Exception as e:
-        print(f"Error during feature extraction or CUDA transfer: {e}")
-
-    # with torch.cuda.amp.autocast():
-    with torch.amp.autocast(device_type="cuda"):
-        predicted_ids = model.generate(input_features=input_features)
-
-    torch.cuda.empty_cache()
-
-    transcription = processor.tokenizer.decode(predicted_ids[0], skip_special_tokens=True)
-
-    print(f'This is the original transcription : {transcription}')
-
-#   Load the words from the new word file
-    word_file_path = 'words_ama.txt'  # Replace this with the actual path to your word file
-    words = load_words(word_file_path)
-
-    # Map each word from the transcription to the closest word in the word file
-    final_transcription = map_transcription_words(transcription, words)
-
-    print(f"Final transcription: {final_transcription}")
-
-    # Send the final transcription back to the client
-    return jsonify({'text': transcription})
-
-
-
-if __name__ == '__main__':
-    # # Create the 'saved_audios' directory if it doesn't exist
-    # os.makedirs('saved_audios', exist_ok=True)
-    socketio.run(app,host='0.0.0.0',port=5000,debug=True, use_reloader=False)  # Disable the use of reloader
+if __name__ == "__main__":
+    socketio.run(app, host="0.0.0.0", port=5001, debug=False, use_reloader=False)

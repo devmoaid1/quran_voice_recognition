@@ -162,10 +162,7 @@ const QuranPageStructure = ({
   //   }
   // }, [pageNumber]);
   useEffect(() => {
-    if (
-      pageNumber === 1 || 
-      (pageNumber >= 582 && pageNumber <= 604)
-    ) {
+    if (pageNumber >= 1 && pageNumber <= 604) {
       fetch(`/NEW_fixed_quran_pages/page_${pageNumber}_ayahs_updated.json`)
         .then((res) => res.json())
         .then((data) => {
@@ -174,9 +171,6 @@ const QuranPageStructure = ({
         .catch((err) => {
           console.error(`Failed to load page data for page ${pageNumber}`, err);
         });
-    } else {
-      console.warn(`Skipping fetch for page ${pageNumber}, not in allowed range.`);
-      setPage(null); // Optional: clear state if page is not loaded
     }
   }, [pageNumber]);
 
@@ -240,7 +234,7 @@ const QuranPageStructure = ({
         };
         
         setTimeout(() => {
-          lineRefs.current[lineWithAyah.line_number].scrollIntoView(scrollOptions);
+          lineRefs.current[lineWithAyah.line_number]?.scrollIntoView(scrollOptions);
         }, 100);
       }
     }
