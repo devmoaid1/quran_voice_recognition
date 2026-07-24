@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import io from 'socket.io-client';
-import Recorder from 'opus-recorder';
 import DotLoader from '../../../../components/dot_loader';
 import QuranPageStructure from "../../../../components/QuranPageStructure";
 import { readers } from "../../../../core/constants/reader"; // Import readers for playing audio
@@ -18,7 +17,7 @@ const socket = io('http://localhost:5001', {
 const RecordingSection = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [transcription, setTranscription] = useState('Transcription will appear here...');
+  const [transcription, setTranscription] = useState([]);
   const [selectedSurah, setSelectedSurah] = useState(''); // Track the selected Surah
   const [selectedPage, setSelectedPage] = useState(1); // Default Page 1
   const [highlightedAyah, setHighlightedAyah] = useState(null);
@@ -29,10 +28,14 @@ const RecordingSection = () => {
   const [selectedJuz, setSelectedJuz] = useState(null);
 
   const recorderRef = useRef(null);
-  const audioContextRef = useRef(null);
-  const chunkIntervalRef = useRef(null);
   const mediaStreamRef = useRef(null);
   const audioRef = useRef(null);
+  // Accumulates all WebM chunks so every emit includes the stream header.
+  const audioChunksRef = useRef([]);
+  // When true, the next ondataavailable fire should be ignored (mid-reset drain).
+  const isResettingRef = useRef(false);
+  // Keep selectedSurah accessible inside ondataavailable without stale closure.
+  const selectedSurahRef = useRef('');
 
 
   useEffect(() => {
@@ -65,7 +68,8 @@ const RecordingSection = () => {
     const handleLiveTranscription = (data) => {
       console.log("📥 Full live_transcription event:", data);
 
-      setTranscription(data.text || 'No transcription received.');
+      // Append each chunk result as a new line in the transcript.
+      setTranscription(prev => [...prev, data.text || '']);
 
       setMismatches(
         data.mismatched_words?.length > 0
@@ -81,10 +85,9 @@ const RecordingSection = () => {
       }
 
       if (data.matched_word_ids && Array.isArray(data.matched_word_ids)) {
-        setMatchedWords(data.matched_word_ids.map(String));
+        // Merge new IDs into existing set — never shrink during a session.
+        setMatchedWords(prev => [...new Set([...prev, ...data.matched_word_ids.map(String)])]);
         console.log("⚡ Matched Words:", data.matched_word_ids);
-      } else {
-        setMatchedWords([]);
       }
 
       if (data.matched_ayah) {
@@ -95,6 +98,21 @@ const RecordingSection = () => {
           setSelectedPage(page);
           setHighlightedAyah({ sura, ayah });
         });
+      }
+
+      // Ayah complete — stop and restart the MediaRecorder so the next WebM stream
+      // begins with a fresh header. Simply clearing the array is not enough because
+      // the running MediaRecorder never re-emits the header mid-stream.
+      if (data.ayah_complete && recorderRef.current && mediaStreamRef.current) {
+        console.log("✅ Ayah complete — restarting MediaRecorder for fresh WebM header");
+        isResettingRef.current = true;
+        recorderRef.current.stop(); // triggers one final ondataavailable (ignored via flag)
+        // ondataavailable → onstop fires synchronously after stop(); restart inside onstop.
+        recorderRef.current.onstop = () => {
+          isResettingRef.current = false;
+          audioChunksRef.current = [];
+          startMediaRecorder(mediaStreamRef.current);
+        };
       }
     };
 
@@ -185,6 +203,36 @@ const RecordingSection = () => {
 
   
 
+  // Creates and starts a fresh MediaRecorder on the given stream.
+  // Called both on initial recording start and after each ayah-complete reset.
+  const startMediaRecorder = (stream) => {
+    const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+    recorderRef.current = mediaRecorder;
+
+    mediaRecorder.ondataavailable = async (event) => {
+      // Ignore the drain event emitted when we stop() for an ayah reset.
+      if (isResettingRef.current) return;
+      console.log("ondataavailable triggered, size:", event.data?.size);
+      if (event.data && event.data.size > 0) {
+        audioChunksRef.current.push(event.data);
+        const fullBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const arrayBuffer = await fullBlob.arrayBuffer();
+        console.log("Sending accumulated chunk to server, total size:", fullBlob.size);
+        socket.emit('live_audio', {
+          audio: arrayBuffer,
+          surah: selectedSurahRef.current,
+        });
+      }
+    };
+
+    mediaRecorder.onerror = (err) => {
+      console.error("MediaRecorder error:", err);
+    };
+
+    mediaRecorder.start(3000);
+    console.log("MediaRecorder started (fresh stream).");
+  };
+
   const startRecording = async () => {
     if (!selectedSurah) {
       alert('Please select a Surah before recording.');
@@ -193,62 +241,14 @@ const RecordingSection = () => {
     setHighlightedAyah(null);
     setIsLoading(true);
     try {
-      // Request microphone access.
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
+      selectedSurahRef.current = selectedSurah;
+      audioChunksRef.current = [];
+      isResettingRef.current = false;
       console.log("Audio stream acquired", stream);
 
-      // Create AudioContext and source node.
-      const audioContext = new AudioContext();
-      audioContextRef.current = audioContext;
-      const source = audioContext.createMediaStreamSource(stream);
-      console.log("Created AudioContext and source node", source);
-
-      // Configure Opus-Recorder options.
-      const options = {
-        encoderPath: '/encoderWorker.min.js', // Must be in your public folder.
-        numberOfChannels: 1,
-        encoderSampleRate: 48000,
-      };
-
-      // Create the Recorder instance using the source node.
-      const recorder = new Recorder(options, source);
-      recorderRef.current = recorder;
-
-      // Set the ondataavailable callback.
-      recorder.ondataavailable = (typedArray) => {
-        console.log("ondataavailable triggered, typedArray length:", typedArray?.length);
-        if (typedArray && typedArray.length > 0) {
-          const blob = new Blob([typedArray], { type: 'audio/ogg' });
-          console.log("Got blob, size:", blob.size);
-          if (blob.size > 0) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-              console.log("Sending 5-second chunk to server...");
-              socket.emit('live_audio', { 
-                audio: e.target.result,
-              surah: selectedSurah
-              });
-            };
-            reader.readAsArrayBuffer(blob);
-          }
-        }
-      };
-
-      recorder.onerror = (err) => {
-        console.error("Recorder error:", err);
-      };
-
-      // Start the recorder.
-      await recorder.start();
-      console.log("Recorder started.");
-
-      // Set an interval to stop and restart the recorder every 5 seconds.
-      chunkIntervalRef.current = setInterval(async () => {
-        await recorder.stop(); // Finalize the current chunk.
-        await recorder.start(); // Restart for the next chunk.
-        console.log("Recorder restarted for next chunk.");
-      }, 5000);
+      startMediaRecorder(stream);
 
       setIsRecording(true);
       setIsLoading(false);
@@ -258,25 +258,22 @@ const RecordingSection = () => {
     }
   };
 
-  const stopRecording = async () => {
+  const stopRecording = () => {
     console.log("Stop recording function called.");
     setIsRecording(false);
-    setTranscription("Transcription will appear here...");
+    // Reset all session state for the next recording.
+    setTranscription([]);
+    setMatchedWords([]);
+    setWrongWords([]);
+    audioChunksRef.current = [];
 
-    if (chunkIntervalRef.current) {
-      clearInterval(chunkIntervalRef.current);
-      chunkIntervalRef.current = null;
-    }
     if (recorderRef.current) {
-      console.log("Stopping recorder...");
-      await recorderRef.current.stop();
+      console.log("Stopping MediaRecorder...");
+      // Clear onstop so the ayah-reset restart logic doesn't fire on a real stop.
+      recorderRef.current.onstop = null;
+      recorderRef.current.stop();
       recorderRef.current = null;
-      console.log("Recorder stopped.");
-    }
-    if (audioContextRef.current) {
-      await audioContextRef.current.close();
-      audioContextRef.current = null;
-      console.log("AudioContext closed.");
+      console.log("MediaRecorder stopped.");
     }
     // Stop the media stream tracks to release the microphone.
     if (mediaStreamRef.current) {
@@ -394,8 +391,13 @@ const RecordingSection = () => {
 
 
           {/* Transcription Text */}
-          <div className="flex-1 text-sm text-gray-700 dark:text-gray-400 text-center sm:text-right truncate ">
-            {transcription}
+          <div className="flex-1 text-sm text-gray-700 dark:text-gray-400 text-center sm:text-right max-h-20 overflow-y-auto">
+            {transcription.length === 0
+              ? <span className="opacity-50">Transcription will appear here...</span>
+              : transcription.map((line, i) => (
+                  <div key={i}>{line}</div>
+                ))
+            }
           </div>
 
           {/* Recording Section */}

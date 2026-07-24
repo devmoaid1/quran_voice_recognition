@@ -26,7 +26,7 @@ transcript line by line.
 
 ## Sub-Task 1 — Replace opus-recorder with native MediaRecorder on the frontend
 
-**Status**: [ ] pending
+**Status**: [x] done
 
 ### Intent
 Remove the dependency on `opus-recorder` and its manual stop/start interval timer. Use the
@@ -67,7 +67,7 @@ every 3 seconds without any external encoder worker. This eliminates `chunkInter
 
 ## Sub-Task 2 — Add per-session last-word-position tracking on the backend
 
-**Status**: [ ] pending
+**Status**: [x] done
 
 ### Intent
 Currently `map_transcription_words` always scans from the beginning of the surah's word list for
@@ -116,7 +116,7 @@ its forward search from that position, ensuring the matcher only advances — ne
 
 ## Sub-Task 3 — Accumulate transcript and matched words on the frontend
 
-**Status**: [ ] pending
+**Status**: [x] done
 
 ### Intent
 Currently `transcription` state is a single string replaced on every response, and `matchedWords`

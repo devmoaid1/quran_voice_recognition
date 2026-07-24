@@ -49,6 +49,13 @@ print("Model loaded.")
 with open(AYAH_RANGES_FILE, encoding="utf-8") as f:
     AYAH_DATA = json.load(f)
 
+# ── Per-session state ─────────────────────────────────────────────────────────
+# Maps sid → {"surah": str, "last_index": int, "last_ayah": int|None}
+# last_index : filtered_positions index of the last matched word (forward-only search)
+# last_ayah  : ayahID matched in the previous chunk; used to detect when the user
+#              moves to a new ayah so the audio buffer can be reset on the frontend.
+session_state = {}
+
 # Global word ID of the first word of each surah (= ayah_begin of ayah 1 in page JSON).
 # Used to convert local (0-based) ayah_ranges indices ↔ global word IDs.
 SURAH_STARTING_WORD_ID = {
@@ -117,9 +124,10 @@ def find_matched_ayah(surah_name, matched_word_ids):
     return {"sura": surah_number, "ayah": best_ayah}
 
 
-def map_transcription_words(transcription, surah_words, surah_name):
+def map_transcription_words(transcription, surah_words, surah_name, start_index=0):
     """Fuzzy-match each transcribed word to its Quran equivalent.
-    Returns (mapped_text, mismatches, matched_word_ids).
+    Returns (mapped_text, mismatches, matched_word_ids, wrong_word_ids, last_idx).
+    last_idx is the filtered_positions index of the final matched word.
     """
     trans_words   = transcription.split()
     norm_quran    = [remove_harakat(w) for w in surah_words]
@@ -138,14 +146,15 @@ def map_transcription_words(transcription, surah_words, surah_name):
     matched_word_ids = []
     wrong_word_ids   = []
     used_indices     = set()
-    last_idx         = -1
+    # Seed last_idx from start_index so forward search begins at the caller's position.
+    last_idx         = start_index - 1
 
     for tw in trans_words:
         tw_norm      = remove_harakat(tw)
         best_idx     = None
         best_score   = 0.0
 
-        # Forward search first
+        # Forward search first (from last matched position)
         for i in range(last_idx + 1, len(filtered_words)):
             if i in used_indices:
                 continue
@@ -154,9 +163,10 @@ def map_transcription_words(transcription, surah_words, surah_name):
                 best_score = score
                 best_idx   = i
 
-        # Fallback: full scan
+        # Fallback: wider scan — but never go before start_index to avoid
+        # re-matching words from a previously completed ayah.
         if best_idx is None or best_score < 0.8:
-            for i in range(len(filtered_words)):
+            for i in range(start_index, len(filtered_words)):
                 if i in used_indices:
                     continue
                 score = SequenceMatcher(None, tw_norm, filtered_words[i]).ratio()
@@ -198,7 +208,7 @@ def map_transcription_words(transcription, surah_words, surah_name):
             else:
                 mapped.append(tw)
 
-    return " ".join(mapped), mismatches, matched_word_ids, wrong_word_ids
+    return " ".join(mapped), mismatches, matched_word_ids, wrong_word_ids, last_idx
 
 
 def find_closest_verse(transcription, surah_verses):
@@ -212,8 +222,19 @@ def find_closest_verse(transcription, surah_verses):
     return None, None
 
 
+# Maximum audio duration fed to Whisper per chunk (seconds at 16kHz).
+# Whisper degrades on very long inputs — attention spreads thin past ~15s,
+# causing repetition loops and missed words on long ayahs.
+MAX_WHISPER_SECONDS = 15
+MAX_WHISPER_SAMPLES = MAX_WHISPER_SECONDS * 16000  # 240 000 samples
+
+
 def transcribe_audio_array(speech_array):
     """Run Whisper inference on a float32 16kHz mono array."""
+    # Trim to the most recent MAX_WHISPER_SECONDS to keep attention focused.
+    if len(speech_array) > MAX_WHISPER_SAMPLES:
+        speech_array = speech_array[-MAX_WHISPER_SAMPLES:]
+
     input_features = processor.feature_extractor(
         speech_array,
         sampling_rate=16000,
@@ -221,7 +242,15 @@ def transcribe_audio_array(speech_array):
     ).input_features.to(DEVICE)
 
     with torch.no_grad():
-        predicted_ids = model.generate(input_features=input_features)
+        predicted_ids = model.generate(
+            input_features=input_features,
+            # Prevent repetition loops — the single biggest source of hallucination
+            # on long ayahs where Whisper loses confidence and repeats tokens.
+            no_repeat_ngram_size=3,
+            # Do not condition each token on previously generated text; avoids
+            # the model "completing" a familiar phrase rather than transcribing audio.
+            condition_on_prev_tokens=False,
+        )
 
     if DEVICE == "mps":
         torch.mps.empty_cache()
@@ -231,7 +260,7 @@ def transcribe_audio_array(speech_array):
     return processor.tokenizer.decode(predicted_ids[0], skip_special_tokens=True)
 
 
-def load_audio_from_bytes(audio_bytes, fmt="ogg"):
+def load_audio_from_bytes(audio_bytes, fmt="webm"):
     """Convert raw audio bytes → float32 16kHz mono numpy array."""
     buf = BytesIO(audio_bytes)
     segment = AudioSegment.from_file(buf, format=fmt)
@@ -277,7 +306,9 @@ def handle_connect():
 
 @socketio.on("disconnect")
 def handle_disconnect():
-    print("Client disconnected:", request.sid)
+    sid = request.sid
+    session_state.pop(sid, None)
+    print("Client disconnected:", sid)
 
 
 @socketio.on("live_audio")
@@ -286,6 +317,7 @@ def handle_live_audio(data):
         emit("live_transcription", {"error": "Missing audio or surah data"})
         return
 
+    sid         = request.sid
     surah_name  = data["surah"]
     audio_chunk = data["audio"]
     print(f"Received audio for: {surah_name}")
@@ -295,13 +327,22 @@ def handle_live_audio(data):
         emit("live_transcription", {"error": f"Surah {surah_name} not found"})
         return
 
+    # Resolve forward-search start position for this session.
+    prev        = session_state.get(sid, {})
+    start_index = 0 if prev.get("surah") != surah_name else prev.get("last_index", 0)
+
     try:
-        speech_array  = load_audio_from_bytes(bytes(audio_chunk))
+        # audio_chunk may arrive as bytes, bytearray, or a list of ints from Socket.IO.
+        if isinstance(audio_chunk, (bytes, bytearray)):
+            raw_bytes = bytes(audio_chunk)
+        else:
+            raw_bytes = bytes(bytearray(audio_chunk))
+        speech_array  = load_audio_from_bytes(raw_bytes)
         transcription = transcribe_audio_array(speech_array)
         print(f"Transcription: {transcription}")
 
-        mapped_text, mismatches, matched_word_ids, wrong_word_ids = map_transcription_words(
-            transcription, surah_words, surah_name
+        mapped_text, mismatches, matched_word_ids, wrong_word_ids, last_idx = map_transcription_words(
+            transcription, surah_words, surah_name, start_index=start_index
         )
 
         closest_verse, ayah_number = find_closest_verse(mapped_text, surah_verses)
@@ -314,13 +355,50 @@ def handle_live_audio(data):
         if matched_ayah is None and ayah_number is not None:
             matched_ayah = {"sura": surah_number, "ayah": ayah_number}
 
+        current_ayah_id = matched_ayah["ayah"] if matched_ayah else None
+        prev_ayah_id    = prev.get("last_ayah")
+
+        # Check 1 — ayah boundary by word index:
+        # last_idx reached or passed the ayah_end entry → full ayah covered.
+        # Works on the very first chunk and any single-chunk ayah.
+        index_boundary = False
+        if current_ayah_id is not None and surah_name in AYAH_DATA:
+            ayah_entry = next(
+                (e for e in AYAH_DATA[surah_name] if e["ayahID"] == current_ayah_id), None
+            )
+            if ayah_entry and last_idx >= ayah_entry["ayah_end"]:
+                index_boundary = True
+
+        # Check 2 — ayah transition between chunks:
+        # The majority of words in this chunk landed in a different ayah than last chunk,
+        # meaning the previous ayah was fully read in an earlier chunk.
+        ayah_changed = (
+            current_ayah_id is not None and
+            prev_ayah_id    is not None and
+            current_ayah_id != prev_ayah_id
+        )
+
+        ayah_complete = index_boundary or ayah_changed
+
+        # Update session state for the next chunk.
+        new_index = max(start_index, last_idx + 1)
+        session_state[sid] = {
+            "surah":      surah_name,
+            "last_index": new_index,
+            "last_ayah":  current_ayah_id,
+        }
+        if ayah_complete:
+            reason = "index boundary" if index_boundary else f"ayah changed {prev_ayah_id}→{current_ayah_id}"
+            print(f"Session {sid}: ayah_complete ({reason})")
+
         payload = {
-            "text":            mapped_text,
-            "closest_verse":   closest_verse or "",
+            "text":             mapped_text,
+            "closest_verse":    closest_verse or "",
             "mismatched_words": mismatches,
-            "surah_name":      surah_name,
+            "surah_name":       surah_name,
             "matched_word_ids": matched_word_ids,
-            "wrong_word_ids":  wrong_word_ids,
+            "wrong_word_ids":   wrong_word_ids,
+            "ayah_complete":    ayah_complete,
         }
         if matched_ayah:
             payload["matched_ayah"] = matched_ayah

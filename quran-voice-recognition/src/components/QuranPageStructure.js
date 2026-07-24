@@ -321,8 +321,12 @@ const QuranPageStructure = ({
               }
             }
 
+            // Priority: wrong (red) > matched (green) > highlighted ayah (yellow)
             let highlightClass = "";
-            if (isMatchedWord) {
+            if (wrongWords.includes(id)) {
+              highlightClass =
+                "text-red-600 dark:text-red-400 font-bold transition-all duration-300 ease-in-out";
+            } else if (isMatchedWord) {
               highlightClass =
                 "text-green-500 dark:text-green-300 font-semibold transition-all duration-500 ease-in-out";
             } else if (isHighlighted) {
@@ -333,11 +337,7 @@ const QuranPageStructure = ({
             const wordSpan = (
               <span
                 key={id}
-                className={`quran-word ${highlightClass} ${
-                  wrongWords.includes(id)
-                    ? "text-red-600 dark:text-red-400 font-bold"
-                    : ""
-                } cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors duration-200`}
+                className={`quran-word ${highlightClass} cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors duration-200`}
                 onClick={() => handleWordClick(wordNum)}
                 role="button"
                 tabIndex={0}
