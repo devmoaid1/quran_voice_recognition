@@ -100,14 +100,13 @@ const RecordingSection = () => {
         });
       }
 
-      // Ayah complete — stop and restart the MediaRecorder so the next WebM stream
-      // begins with a fresh header. Simply clearing the array is not enough because
-      // the running MediaRecorder never re-emits the header mid-stream.
-      if (data.ayah_complete && recorderRef.current && mediaStreamRef.current) {
-        console.log("✅ Ayah complete — restarting MediaRecorder for fresh WebM header");
+      // After every successful chunk the server sends buffer_reset: true.
+      // Restart the MediaRecorder so the next WebM stream has a fresh header —
+      // the server's last_index already tracks word position so nothing is lost.
+      if (data.buffer_reset && recorderRef.current && mediaStreamRef.current) {
+        console.log("🔄 Buffer reset — restarting MediaRecorder for fresh WebM header");
         isResettingRef.current = true;
         recorderRef.current.stop(); // triggers one final ondataavailable (ignored via flag)
-        // ondataavailable → onstop fires synchronously after stop(); restart inside onstop.
         recorderRef.current.onstop = () => {
           isResettingRef.current = false;
           audioChunksRef.current = [];
@@ -204,20 +203,29 @@ const RecordingSection = () => {
   
 
   // Creates and starts a fresh MediaRecorder on the given stream.
-  // Called both on initial recording start and after each ayah-complete reset.
+  // Called both on initial recording start and after each buffer reset.
   const startMediaRecorder = (stream) => {
     const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
     recorderRef.current = mediaRecorder;
 
     mediaRecorder.ondataavailable = async (event) => {
-      // Ignore the drain event emitted when we stop() for an ayah reset.
+      // Ignore the drain event emitted when we stop() for a reset.
       if (isResettingRef.current) return;
       console.log("ondataavailable triggered, size:", event.data?.size);
       if (event.data && event.data.size > 0) {
         audioChunksRef.current.push(event.data);
-        const fullBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        const arrayBuffer = await fullBlob.arrayBuffer();
-        console.log("Sending accumulated chunk to server, total size:", fullBlob.size);
+
+        // Always send header (chunk[0]) + current timeslice only.
+        // Never accumulate all chunks — the server resets position after every
+        // response so we only want the audio since the last reset, not all history.
+        const header = audioChunksRef.current[0];
+        const current = audioChunksRef.current[audioChunksRef.current.length - 1];
+        const blobToSend = audioChunksRef.current.length === 1
+          ? new Blob([header], { type: 'audio/webm' })          // first chunk has header already
+          : new Blob([header, current], { type: 'audio/webm' }); // header + latest slice only
+
+        const arrayBuffer = await blobToSend.arrayBuffer();
+        console.log("Sending chunk to server, size:", blobToSend.size);
         socket.emit('live_audio', {
           audio: arrayBuffer,
           surah: selectedSurahRef.current,

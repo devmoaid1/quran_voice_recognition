@@ -50,10 +50,10 @@ with open(AYAH_RANGES_FILE, encoding="utf-8") as f:
     AYAH_DATA = json.load(f)
 
 # ── Per-session state ─────────────────────────────────────────────────────────
-# Maps sid → {"surah": str, "last_index": int, "last_ayah": int|None}
-# last_index : filtered_positions index of the last matched word (forward-only search)
-# last_ayah  : ayahID matched in the previous chunk; used to detect when the user
-#              moves to a new ayah so the audio buffer can be reset on the frontend.
+# Maps sid → {"surah": str, "last_index": int}
+# last_index : filtered_positions index of the last matched word.
+#              Advances word-by-word across chunks — the frontend resets its audio
+#              buffer after every chunk so the server never needs ayah-level tracking.
 session_state = {}
 
 # Global word ID of the first word of each surah (= ayah_begin of ayah 1 in page JSON).
@@ -124,17 +124,27 @@ def find_matched_ayah(surah_name, matched_word_ids):
     return {"sura": surah_number, "ayah": best_ayah}
 
 
+# How many words ahead of the last match to search before treating as a substitution.
+# Wide enough to handle a skipped word or two; narrow enough to prevent jumping
+# to a distant repeated word (e.g. "ما" or "الذي" appearing many times in long surahs).
+MATCH_LOOKAHEAD = 6
+
+
 def map_transcription_words(transcription, surah_words, surah_name, start_index=0):
     """Fuzzy-match each transcribed word to its Quran equivalent.
     Returns (mapped_text, mismatches, matched_word_ids, wrong_word_ids, last_idx).
     last_idx is the filtered_positions index of the final matched word.
-    """
-    trans_words   = transcription.split()
-    norm_quran    = [remove_harakat(w) for w in surah_words]
-    starting_id   = SURAH_STARTING_WORD_ID.get(surah_name, 1)
 
-    # Filter out digit-only entries (ayah markers)
-    filtered_words    = []
+    Matching strategy:
+    - Search only within MATCH_LOOKAHEAD positions ahead of last_idx.
+    - If no match >= 0.8 in that window → substitution error at next expected position.
+    - Never searches behind start_index (prevents re-matching prior chunks).
+    """
+    trans_words        = transcription.split()
+    starting_id        = SURAH_STARTING_WORD_ID.get(surah_name, 1)
+
+    # Filter out digit-only entries (ayah markers), preserve original positions.
+    filtered_words     = []
     filtered_positions = []
     for idx, w in enumerate(surah_words):
         if not w.strip().isdigit():
@@ -146,16 +156,19 @@ def map_transcription_words(transcription, surah_words, surah_name, start_index=
     matched_word_ids = []
     wrong_word_ids   = []
     used_indices     = set()
-    # Seed last_idx from start_index so forward search begins at the caller's position.
-    last_idx         = start_index - 1
+    last_idx         = start_index - 1   # last successfully matched filtered index
 
     for tw in trans_words:
-        tw_norm      = remove_harakat(tw)
-        best_idx     = None
-        best_score   = 0.0
+        tw_norm    = remove_harakat(tw)
+        best_idx   = None
+        best_score = 0.0
 
-        # Forward search first (from last matched position)
-        for i in range(last_idx + 1, len(filtered_words)):
+        # Search only within MATCH_LOOKAHEAD positions ahead of last match.
+        # Prevents silent word-skipping and avoids matching distant repeated words.
+        search_start = max(start_index, last_idx + 1)
+        search_end   = min(len(filtered_words), search_start + MATCH_LOOKAHEAD)
+
+        for i in range(search_start, search_end):
             if i in used_indices:
                 continue
             score = SequenceMatcher(None, tw_norm, filtered_words[i]).ratio()
@@ -163,19 +176,8 @@ def map_transcription_words(transcription, surah_words, surah_name, start_index=
                 best_score = score
                 best_idx   = i
 
-        # Fallback: wider scan — but never go before start_index to avoid
-        # re-matching words from a previously completed ayah.
-        if best_idx is None or best_score < 0.8:
-            for i in range(start_index, len(filtered_words)):
-                if i in used_indices:
-                    continue
-                score = SequenceMatcher(None, tw_norm, filtered_words[i]).ratio()
-                if score > best_score:
-                    best_score = score
-                    best_idx   = i
-
-        if best_idx is not None and best_score > 0.8:
-            # Good match — word was recognised and located in the surah.
+        if best_idx is not None and best_score >= 0.8:
+            # Good match within lookahead window.
             used_indices.add(best_idx)
             last_idx       = best_idx
             real_idx       = filtered_positions[best_idx]
@@ -184,16 +186,15 @@ def map_transcription_words(transcription, surah_words, surah_name, start_index=
             matched_word_ids.append(str(global_word_id))
 
             if remove_harakat(original_word) != tw_norm:
+                # Matched positionally but spelling differs → wrong word.
                 mapped.append(f"({tw}) {original_word}")
                 mismatches.append((tw, original_word))
                 wrong_word_ids.append(str(global_word_id))
             else:
                 mapped.append(original_word)
         else:
-            # No match above threshold — the user said a word that doesn't resemble
-            # anything in the surah at this score.  We know positionally this should
-            # be the word right after the last matched one, so flag that expected word
-            # as wrong (substitution error).
+            # No match in lookahead window → substitution error at next expected position.
+            # Advance last_idx so subsequent words stay in sync.
             next_idx = last_idx + 1
             if next_idx < len(filtered_words):
                 real_idx       = filtered_positions[next_idx]
@@ -355,41 +356,11 @@ def handle_live_audio(data):
         if matched_ayah is None and ayah_number is not None:
             matched_ayah = {"sura": surah_number, "ayah": ayah_number}
 
-        current_ayah_id = matched_ayah["ayah"] if matched_ayah else None
-        prev_ayah_id    = prev.get("last_ayah")
-
-        # Check 1 — ayah boundary by word index:
-        # last_idx reached or passed the ayah_end entry → full ayah covered.
-        # Works on the very first chunk and any single-chunk ayah.
-        index_boundary = False
-        if current_ayah_id is not None and surah_name in AYAH_DATA:
-            ayah_entry = next(
-                (e for e in AYAH_DATA[surah_name] if e["ayahID"] == current_ayah_id), None
-            )
-            if ayah_entry and last_idx >= ayah_entry["ayah_end"]:
-                index_boundary = True
-
-        # Check 2 — ayah transition between chunks:
-        # The majority of words in this chunk landed in a different ayah than last chunk,
-        # meaning the previous ayah was fully read in an earlier chunk.
-        ayah_changed = (
-            current_ayah_id is not None and
-            prev_ayah_id    is not None and
-            current_ayah_id != prev_ayah_id
-        )
-
-        ayah_complete = index_boundary or ayah_changed
-
-        # Update session state for the next chunk.
+        # Advance position word-by-word. The frontend resets its audio buffer
+        # after every successful chunk so last_index is the only state needed.
         new_index = max(start_index, last_idx + 1)
-        session_state[sid] = {
-            "surah":      surah_name,
-            "last_index": new_index,
-            "last_ayah":  current_ayah_id,
-        }
-        if ayah_complete:
-            reason = "index boundary" if index_boundary else f"ayah changed {prev_ayah_id}→{current_ayah_id}"
-            print(f"Session {sid}: ayah_complete ({reason})")
+        session_state[sid] = {"surah": surah_name, "last_index": new_index}
+        print(f"Session {sid}: last_index → {new_index}")
 
         payload = {
             "text":             mapped_text,
@@ -398,7 +369,9 @@ def handle_live_audio(data):
             "surah_name":       surah_name,
             "matched_word_ids": matched_word_ids,
             "wrong_word_ids":   wrong_word_ids,
-            "ayah_complete":    ayah_complete,
+            # Tell the frontend to reset its audio buffer after every chunk
+            # so the next MediaRecorder starts with a fresh WebM header.
+            "buffer_reset":     True,
         }
         if matched_ayah:
             payload["matched_ayah"] = matched_ayah
