@@ -30,10 +30,12 @@ const RecordingSection = () => {
   const recorderRef = useRef(null);
   const mediaStreamRef = useRef(null);
   const audioRef = useRef(null);
-  // Accumulates all WebM chunks so every emit includes the stream header.
+  // Accumulates all WebM chunks for the lifetime of one MediaRecorder instance.
+  // Index 0 is always the WebM header (initialization segment).
   const audioChunksRef = useRef([]);
-  // When true, the next ondataavailable fire should be ignored (mid-reset drain).
-  const isResettingRef = useRef(false);
+  // Index into audioChunksRef where the current send-window starts.
+  // Updated after each server response instead of restarting the recorder.
+  const resetChunkIndexRef = useRef(0);
   // Keep selectedSurah accessible inside ondataavailable without stale closure.
   const selectedSurahRef = useRef('');
 
@@ -101,17 +103,14 @@ const RecordingSection = () => {
       }
 
       // After every successful chunk the server sends buffer_reset: true.
-      // Restart the MediaRecorder so the next WebM stream has a fresh header —
-      // the server's last_index already tracks word position so nothing is lost.
-      if (data.buffer_reset && recorderRef.current && mediaStreamRef.current) {
-        console.log("🔄 Buffer reset — restarting MediaRecorder for fresh WebM header");
-        isResettingRef.current = true;
-        recorderRef.current.stop(); // triggers one final ondataavailable (ignored via flag)
-        recorderRef.current.onstop = () => {
-          isResettingRef.current = false;
-          audioChunksRef.current = [];
-          startMediaRecorder(mediaStreamRef.current);
-        };
+      // Keep the MediaRecorder running — stopping and restarting it creates a
+      // dead window of ~200ms where spoken words are lost at chunk boundaries.
+      // Instead, just mark the current chunk index so ondataavailable knows
+      // where to start the next send window. The recorder (and its WebM header)
+      // stay alive; the server's last_index already prevents re-matching.
+      if (data.buffer_reset && recorderRef.current) {
+        console.log("🔄 Buffer reset — marking new window start (recorder keeps running)");
+        resetChunkIndexRef.current = audioChunksRef.current.length;
       }
     };
 
@@ -202,43 +201,74 @@ const RecordingSection = () => {
 
   
 
-  // Creates and starts a fresh MediaRecorder on the given stream.
-  // Called both on initial recording start and after each buffer reset.
+  // Creates and starts a MediaRecorder on the given stream.
+  // The recorder runs continuously for the entire recording session — no
+  // stop/restart on chunk boundaries, which eliminates the dead window where
+  // words spoken at the seam of two chunks were silently dropped.
   const startMediaRecorder = (stream) => {
     const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
     recorderRef.current = mediaRecorder;
 
     mediaRecorder.ondataavailable = async (event) => {
-      // Ignore the drain event emitted when we stop() for a reset.
-      if (isResettingRef.current) return;
       console.log("ondataavailable triggered, size:", event.data?.size);
-      if (event.data && event.data.size > 0) {
-        audioChunksRef.current.push(event.data);
+      if (!event.data || event.data.size === 0) return;
 
-        // Always send header (chunk[0]) + current timeslice only.
-        // Never accumulate all chunks — the server resets position after every
-        // response so we only want the audio since the last reset, not all history.
-        const header = audioChunksRef.current[0];
-        const current = audioChunksRef.current[audioChunksRef.current.length - 1];
-        const blobToSend = audioChunksRef.current.length === 1
-          ? new Blob([header], { type: 'audio/webm' })          // first chunk has header already
-          : new Blob([header, current], { type: 'audio/webm' }); // header + latest slice only
+      audioChunksRef.current.push(event.data);
 
-        const arrayBuffer = await blobToSend.arrayBuffer();
-        console.log("Sending chunk to server, size:", blobToSend.size);
-        socket.emit('live_audio', {
-          audio: arrayBuffer,
-          surah: selectedSurahRef.current,
-        });
+      // Build a blob covering: WebM header (index 0) + every chunk since the
+      // last server-acknowledged reset. This is never just the latest slice —
+      // accumulating from the reset point means boundary words are always
+      // included in exactly one send window, with no gap between them.
+      const header     = audioChunksRef.current[0];
+      const windowStart = resetChunkIndexRef.current;
+      const windowChunks = audioChunksRef.current.slice(Math.max(1, windowStart));
+
+      // If the window already contains the header (windowStart === 0), don't
+      // prepend it a second time.
+      const parts = windowStart === 0
+        ? audioChunksRef.current.slice()       // header is already chunk[0]
+        : [header, ...windowChunks];
+
+      const blobToSend = new Blob(parts, { type: 'audio/webm' });
+
+      // Client-side silence gate: check only the newest slice so we don't
+      // re-evaluate older (already-matched) audio.
+      const isSilent = await (async () => {
+        try {
+          const audioCtx = new AudioContext({ sampleRate: 16000 });
+          const buf = await event.data.arrayBuffer();
+          const decoded = await audioCtx.decodeAudioData(buf);
+          const pcm = decoded.getChannelData(0);
+          let sumSq = 0;
+          for (let i = 0; i < pcm.length; i++) sumSq += pcm[i] * pcm[i];
+          const rms = Math.sqrt(sumSq / pcm.length);
+          audioCtx.close();
+          console.log("Client RMS:", rms.toFixed(5));
+          return rms < 0.005;
+        } catch (_) {
+          return false; // if decode fails, let the server decide
+        }
+      })();
+
+      if (isSilent) {
+        console.log("Silent chunk — not sending to server.");
+        return;
       }
+
+      const arrayBuffer = await blobToSend.arrayBuffer();
+      console.log("Sending chunk to server, size:", blobToSend.size);
+      socket.emit('live_audio', {
+        audio: arrayBuffer,
+        surah: selectedSurahRef.current,
+      });
     };
 
     mediaRecorder.onerror = (err) => {
       console.error("MediaRecorder error:", err);
     };
 
-    mediaRecorder.start(3000);
-    console.log("MediaRecorder started (fresh stream).");
+    mediaRecorder.start(5000);
+    console.log("MediaRecorder started (continuous stream).");
   };
 
   const startRecording = async () => {
@@ -253,7 +283,7 @@ const RecordingSection = () => {
       mediaStreamRef.current = stream;
       selectedSurahRef.current = selectedSurah;
       audioChunksRef.current = [];
-      isResettingRef.current = false;
+      resetChunkIndexRef.current = 0;
       console.log("Audio stream acquired", stream);
 
       startMediaRecorder(stream);
@@ -274,11 +304,10 @@ const RecordingSection = () => {
     setMatchedWords([]);
     setWrongWords([]);
     audioChunksRef.current = [];
+    resetChunkIndexRef.current = 0;
 
     if (recorderRef.current) {
       console.log("Stopping MediaRecorder...");
-      // Clear onstop so the ayah-reset restart logic doesn't fire on a real stop.
-      recorderRef.current.onstop = null;
       recorderRef.current.stop();
       recorderRef.current = null;
       console.log("MediaRecorder stopped.");

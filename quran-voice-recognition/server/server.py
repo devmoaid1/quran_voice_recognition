@@ -229,6 +229,18 @@ def find_closest_verse(transcription, surah_verses):
 MAX_WHISPER_SECONDS = 15
 MAX_WHISPER_SAMPLES = MAX_WHISPER_SECONDS * 16000  # 240 000 samples
 
+# Minimum RMS energy threshold.  Chunks whose RMS is below this are silent
+# (or near-silent) and must not be sent to Whisper — Whisper hallucinates on
+# silence, producing fake words that advance the session position.
+SILENCE_RMS_THRESHOLD = 0.009
+
+
+def is_silent(speech_array: np.ndarray) -> bool:
+    """Return True if the chunk is too quiet to contain real speech."""
+    rms = float(np.sqrt(np.mean(speech_array ** 2)))
+    print(f"Audio RMS: {rms:.5f} (threshold {SILENCE_RMS_THRESHOLD})")
+    return rms < SILENCE_RMS_THRESHOLD
+
 
 def transcribe_audio_array(speech_array):
     """Run Whisper inference on a float32 16kHz mono array."""
@@ -338,9 +350,22 @@ def handle_live_audio(data):
             raw_bytes = bytes(audio_chunk)
         else:
             raw_bytes = bytes(bytearray(audio_chunk))
-        speech_array  = load_audio_from_bytes(raw_bytes)
+        speech_array = load_audio_from_bytes(raw_bytes)
+
+        # Skip silent chunks entirely — Whisper hallucinates on silence and
+        # would advance the session position without any real speech.
+        if is_silent(speech_array):
+            print("Silent chunk — skipping transcription.")
+            return
+
         transcription = transcribe_audio_array(speech_array)
         print(f"Transcription: {transcription}")
+
+        # Whisper sometimes returns an empty string on near-silent audio that
+        # passed the energy gate.  Nothing useful to do with an empty transcript.
+        if not transcription.strip():
+            print("Empty transcription — skipping.")
+            return
 
         mapped_text, mismatches, matched_word_ids, wrong_word_ids, last_idx = map_transcription_words(
             transcription, surah_words, surah_name, start_index=start_index
